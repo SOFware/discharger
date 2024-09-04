@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    discharger (0.1.1)
+    discharger (0.1.2)
       open3
       rails (>= 7.2.1)
       rainbow
