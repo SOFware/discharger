@@ -1,0 +1,102 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (major, minor, patch, or specific version like 1.2.3)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+          - custom
+      custom_version:
+        description: 'Custom version (only used if version is set to "custom")'
+        required: false
+        type: string
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Git
+        run: |
+          git config --global user.email "gems@sofwarellc.com"
+          git config --global user.name "SOFware"
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: ruby
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event.inputs.version }}" == "custom" ]]; then
+            echo "version=${{ github.event.inputs.custom_version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create release branch
+        run: |
+          branch_name="release/v${{ steps.version.outputs.version }}-$(date +%Y%m%d%H%M%S)"
+          git checkout -b $branch_name
+          echo "branch_name=$branch_name" >> $GITHUB_ENV
+      
+      - name: Run reissue task
+        run: |
+          bundle exec rake reissue[${{ steps.version.outputs.version }}]
+      
+      - name: Build gem
+        run: |
+          bundle exec rake build:checksum
+      
+      - name: Push changes
+        run: |
+          git push origin ${{ env.branch_name }}
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.branch_name }}
+          base: main
+          title: "Release: ${{ steps.version.outputs.version }}"
+          body: |
+            ## 🚀 Release Preparation
+            
+            This PR prepares the release for version ${{ steps.version.outputs.version }}.
+            
+            ### Checklist
+            - [ ] Version updated in `lib/discharger/version.rb`
+            - [ ] CHANGELOG.md updated with release notes
+            - [ ] Gem builds successfully
+            - [ ] All tests pass
+            
+            ### Next Steps
+            1. Review the changes
+            2. Ensure all release notes are accurate
+            3. Approve and merge this PR
+            4. The `release-gem` workflow will automatically publish to RubyGems.org
+            
+            ---
+            
+            To approve this release, add the `approved-release` label to this PR.
+          labels: |
+            release
+            automated

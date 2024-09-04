@@ -58,6 +58,16 @@ $ gem install discharger
 
 This gem is managed with [Reissue](https://github.com/SOFware/reissue).
 
+### Releasing
+
+Releases are automated via GitHub Actions:
+
+1. Go to Actions → "Prepare Release" → Run workflow
+2. Select version type (major, minor, patch, or custom)
+3. Review the created PR with version bumps and changelog updates
+4. Add the `approved-release` label and merge
+5. The gem will be automatically published to RubyGems.org
+
 Bug reports and pull requests are welcome on GitHub.
 
 ## License
