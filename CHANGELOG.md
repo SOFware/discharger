@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.1.1] - Unreleased
 
+### Fixed
+
+- Added missing require for Rainbow.
+- Adding missing require for reissue.
+
 ## [0.1.0] - 2024-09-04
 
 ### Added

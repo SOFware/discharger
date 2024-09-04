@@ -1,4 +1,7 @@
 require "rake/tasklib"
+require "reissue/rake"
+require "rainbow/refinement"
+using Rainbow
 
 module Discharger
   class Task < Rake::TaskLib
