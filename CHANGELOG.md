@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Ensure that the Reissue tasks are created.
 
+### Changed
+
+- Added an automatic release github action.
+
 ## [0.1.2] - 2024-09-04
 
 ### Fixed

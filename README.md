@@ -52,6 +52,12 @@ $ gem install discharger
 
 This gem is managed with [Reissue](https://github.com/SOFware/reissue).
 
+To release the gem, 
+
+1. run `rake build:checksum` to build and create a verification checksum.
+2. run `rake release` to push the built gem to rubygems.org.
+3. run `git push`
+
 Bug reports and pull requests are welcome on GitHub.
 
 ## License

@@ -1,0 +1,35 @@
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  push:
+    name: Push gem to RubyGems.org
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      # Set up
+      - name: Setup Git
+        run: |
+          git config --global user.email "gems@sofwarellc.com"
+          git config --global user.name "SOFware"
+      - uses: actions/checkout@v4
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: ruby
+      - name: Build
+        run: |
+          bundle exec rake build:checksum
+
+      # Release
+      - uses: rubygems/release-gem@v1
+      - name: Commit updates
+        run: |
+          git push
