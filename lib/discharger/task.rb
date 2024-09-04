@@ -8,6 +8,15 @@ module Discharger
     def self.create(name = :release, &block)
       task = new(name)
       task.instance_eval(&block) if block
+      Reissue::Task.create do |reissue|
+        reissue.version_file = task.version_file
+        reissue.version_limit = task.version_limit
+        reissue.version_redo_proc = task.version_redo_proc
+        reissue.changelog_file = task.changelog_file
+        reissue.updated_paths = task.updated_paths
+        reissue.commit = task.commit
+        reissue.commit_finalize = task.commit
+      end
       task.define
       task
     end
