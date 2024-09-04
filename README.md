@@ -2,7 +2,23 @@
 Code supporting tasks that discharge code for deployment.
 
 ## Usage
-How to use my plugin.
+
+Add `require "discharger/task"` to your Rakefile.
+
+Then build the discharger task
+
+```ruby
+require "discharger/task"
+
+Discharger::Task.create do |task|
+  task.version_file = "config/application.rb"
+  task.release_message_channel = "#some-slack-channel"
+  task.version_constant = "MyApp::VERSION"
+  task.app_name = "My App name"
+  task.commit_identifier = -> { `git rev-parse HEAD`.strip }
+  task.pull_request_url = "https://github.com/SOFware/some-app"
+end
+```
 
 ## Installation
 Add this line to your application's Gemfile:
@@ -20,9 +36,6 @@ Or install it yourself as:
 ```bash
 $ gem install discharger
 ```
-
-## Contributing
-Contribution directions go here.
 
 ## License
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
