@@ -20,6 +20,17 @@ Discharger::Task.create do |task|
 end
 ```
 
+It will make Rake tasks available to push code to branches and notify Slack channels.
+
+```bash
+$ rake -T release
+rake release                            # ---------- STEP 3 ----------
+rake release:build                      # Release the current version to stage
+rake release:prepare                    # ---------- STEP 1 ----------
+rake release:slack[text,channel,emoji]  # Send a message to Slack
+rake release:stage                      # ---------- STEP 2 ----------
+```
+
 ## Installation
 Add this line to your application's Gemfile:
 
@@ -36,6 +47,12 @@ Or install it yourself as:
 ```bash
 $ gem install discharger
 ```
+
+## Contributing
+
+This gem is managed with [Reissue](https://github.com/SOFware/reissue).
+
+Bug reports and pull requests are welcome on GitHub.
 
 ## License
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
