@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.1.2] - Unreleased
 
+### Fixed
+
+- Incorrect reference to the slack task.
+
 ## [0.1.1] - 2024-09-04
 
 ### Fixed

@@ -134,7 +134,7 @@ module Discharger
           "git tag -a v#{current_version} -m 'Release #{current_version}'",
           "git push origin #{production_branch}; git push origin v#{current_version}"
         ) do
-          Rake::Task["slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
+          Rake::Task["#{name}:slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
           syscall "git checkout #{working_branch}"
         end
 
@@ -181,7 +181,7 @@ module Discharger
             "git checkout -b #{staging_branch}",
             "git push origin #{staging_branch} --force"
           ) do
-            Rake::Task["slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
+            Rake::Task["#{name}:slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
             syscall "git checkout #{working_branch}"
           end
         end
