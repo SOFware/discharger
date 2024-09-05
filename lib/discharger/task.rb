@@ -15,7 +15,7 @@ module Discharger
         reissue.changelog_file = task.changelog_file
         reissue.updated_paths = task.updated_paths
         reissue.commit = task.commit
-        reissue.commit_finalize = task.commit
+        reissue.commit_finalize = task.commit_finalize
       end
       task.define
       task

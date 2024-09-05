@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.1.4] - Unreleased
 
+### Fixed
+
+- Use the `commit_finalize` configuration to pass to the Reissue task.
+
 ## [0.1.3] - 2024-09-04
 
 ### Fixed
