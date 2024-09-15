@@ -43,6 +43,11 @@ And then execute:
 $ bundle
 ```
 
+Then run the install generator:
+```bash
+$ rails generate discharger:install
+```
+
 Or install it yourself as:
 ```bash
 $ gem install discharger
