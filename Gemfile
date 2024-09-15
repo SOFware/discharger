@@ -3,18 +3,10 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in discharger.gemspec.
 gemspec
 
+gem "debug"
 gem "puma"
-
-gemspec
-
-# Ruby style guide
 gem "standard"
-
-# Start debugger with binding.b [https://github.com/ruby/debug]
-# gem "debug"
-
-# Test coverage
+gem "sqlite3"
 gem "simplecov"
-
 # Release management
 gem "reissue"
