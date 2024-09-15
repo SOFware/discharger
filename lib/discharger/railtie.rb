@@ -1,8 +1,8 @@
 module Discharger
   class Railtie < ::Rails::Railtie
-    config.before_configuration do
-      if ENV["SLACK_API_TOKEN_RELEASES"].nil?
-        raise "SLACK_API_TOKEN_RELEASES must be set in the environment"
+    config.after_initialize do |app|
+      if Rails.env.development? && Discharger.slack_token.nil?
+        raise "Your application Discharger.slack_token must be set in the environment"
       end
     end
   end
