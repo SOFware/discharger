@@ -199,7 +199,7 @@ GEM
     rdoc (6.7.0)
       psych (>= 4.0.0)
     regexp_parser (2.9.2)
-    reissue (0.2.1)
+    reissue (0.3.0)
       rake
     reline (0.5.9)
       io-console (~> 0.5)
