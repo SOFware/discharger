@@ -5,8 +5,8 @@ using Rainbow
 
 module Discharger
   class Task < Rake::TaskLib
-    def self.create(name = :release, &block)
-      task = new(name)
+    def self.create(name = :release, tasker: Rake::Task, &block)
+      task = new(name, tasker:)
       task.instance_eval(&block) if block
       Reissue::Task.create do |reissue|
         reissue.version_file = task.version_file
@@ -46,13 +46,15 @@ module Discharger
     attr_accessor :commit
     attr_accessor :commit_finalize
 
-    def initialize(name = :release)
+    def initialize(name = :release, tasker: Rake::Task)
       @name = name
+      @tasker = tasker
       @working_branch = "develop"
       @staging_branch = "stage"
       @production_branch = "main"
       @description = "Release the current version to #{staging_branch}"
     end
+    private attr_reader :tasker
 
     # Run a multiple system commands and return true if all commands succeed
     # If any command fails, the method will return false and stop executing
@@ -71,18 +73,19 @@ module Discharger
     #     ["echo", "Hello, World!"],
     #     ["ls", "-l"]
     #   )
-    def syscall(*steps)
+    def syscall(*steps, output: $stdout, error: $stderr)
       success = false
       stdout, stderr, status = nil
       steps.each do |cmd|
         puts cmd.join(" ").bg(:green).black
         stdout, stderr, status = Open3.capture3(*cmd)
         if status.success?
-          puts stdout
+          output.puts stdout
+          success = true
         else
-          puts stderr
+          error.puts stderr
           success = false
-          abort(stderr)
+          exit(status.exitstatus)
         end
       end
       if block_given?
@@ -100,8 +103,8 @@ module Discharger
     #
     # @param message [String] the message to echo
     # return [TrueClass]
-    def sysecho(message)
-      system "echo", message
+    def sysecho(message, output: $stdout)
+      output.puts message
       true
     end
 
@@ -144,7 +147,7 @@ module Discharger
           ["git", "push", "origin", "#{production_branch}:#{production_branch}", "v#{current_version}:v#{current_version}"],
           ["git", "push", "origin", "v#{current_version}"]
         ) do
-          Rake::Task["#{name}:slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
+          tasker["#{name}:slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
           syscall ["git", "checkout", working_branch]
         end
 
@@ -157,7 +160,7 @@ module Discharger
 
         MSG
 
-        Rake::Task["reissue"].invoke
+        tasker["reissue"].invoke
         new_version = Object.const_get(version_constant)
         new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
         continue = syscall(["git", "checkout", "-b #{new_version_branch}"])
@@ -190,7 +193,7 @@ module Discharger
             ["git", "checkout", "-b #{staging_branch}"],
             ["git", "push", "origin", staging_branch, "--force"]
           ) do
-            Rake::Task["#{name}:slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
+            tasker["#{name}:slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
             syscall ["git", "checkout", working_branch]
           end
         end
@@ -241,7 +244,7 @@ module Discharger
           input = $stdin.gets
           exit if input.chomp.match?(/^x/i)
 
-          Rake::Task["reissue:finalize"].invoke
+          tasker["reissue:finalize"].invoke
 
           params = {
             expand: 1,
@@ -282,7 +285,7 @@ module Discharger
               bin/rails #{name}:build
         DESC
         task stage: [:environment] do
-          Rake::Task["build"].invoke
+          tasker["build"].invoke
           current_version = Object.const_get(version_constant)
 
           params = {
