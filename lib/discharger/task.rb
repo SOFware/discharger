@@ -70,8 +70,8 @@ module Discharger
     #
     # @example
     #   syscall(
-    #     ["echo", "Hello, World!"],
-    #     ["ls", "-l"]
+    #     ["echo Hello, World!"],
+    #     ["ls -l"]
     #   )
     def syscall(*steps, output: $stdout, error: $stderr)
       success = false
@@ -137,18 +137,18 @@ module Discharger
         exit if input.chomp.match?(/^x/i)
 
         continue = syscall(
-          ["git", "checkout", working_branch],
-          ["git", "branch", "-D #{staging_branch}", "2>/dev/null || true"],
-          ["git", "branch", "-D #{production_branch}", "2>/dev/null || true"],
-          ["git", "fetch", "origin", "#{staging_branch}:#{staging_branch}", "#{production_branch}:#{production_branch}"],
-          ["git", "checkout", production_branch],
-          ["git", "rebase", staging_branch],
-          ["git", "tag", "-a v#{current_version}", "-m 'Release #{current_version}'"],
-          ["git", "push", "origin", "#{production_branch}:#{production_branch}", "v#{current_version}:v#{current_version}"],
-          ["git", "push", "origin", "v#{current_version}"]
+          ["git checkout #{working_branch}"],
+          ["git branch -D #{staging_branch} 2>/dev/null || true"],
+          ["git branch -D #{production_branch} 2>/dev/null || true"],
+          ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
+          ["git checkout #{production_branch}"],
+          ["git rebase #{staging_branch}"],
+          ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
+          ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
+          ["git push origin v#{current_version}"]
         ) do
           tasker["#{name}:slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
-          syscall ["git", "checkout", working_branch]
+          syscall ["git checkout #{working_branch}"]
         end
 
         abort "Release failed." unless continue
@@ -163,13 +163,13 @@ module Discharger
         tasker["reissue"].invoke
         new_version = Object.const_get(version_constant)
         new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
-        continue = syscall(["git", "checkout", "-b #{new_version_branch}"])
+        continue = syscall(["git checkout -b #{new_version_branch}"])
 
         abort "Bump failed." unless continue
 
         pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
 
-        syscall(["git", "push", "origin", new_version_branch, "--force"]) do
+        syscall(["git push origin #{new_version_branch} --force"]) do
           sysecho <<~MSG
             Branch #{new_version_branch} created.
 
@@ -179,7 +179,7 @@ module Discharger
             Opening PR: #{pr_url}
           MSG
         end.then do |success|
-          syscall ["open", pr_url] if success
+          syscall ["open #{pr_url}"] if success
         end
       end
 
@@ -187,14 +187,14 @@ module Discharger
         desc description
         task build: :environment do
           syscall(
-            ["git", "fetch", "origin", working_branch],
-            ["git", "checkout", working_branch],
-            ["git", "branch", "-D #{staging_branch}", "2> /dev/null || true"],
-            ["git", "checkout", "-b #{staging_branch}"],
-            ["git", "push", "origin", staging_branch, "--force"]
+            ["git fetch origin #{working_branch}"],
+            ["git checkout #{working_branch}"],
+            ["git branch -D #{staging_branch} 2>/dev/null || true"],
+            ["git checkout -b #{staging_branch}"],
+            ["git push origin #{staging_branch} --force"]
           ) do
             tasker["#{name}:slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
-            syscall ["git", "checkout", working_branch]
+            syscall ["git checkout #{working_branch}"]
           end
         end
 
@@ -228,10 +228,11 @@ module Discharger
           current_version = Object.const_get(version_constant)
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
 
-          syscall ["git", "fetch origin #{working_branch}"],
-            ["git", "checkout", working_branch],
-            ["git", "checkout", "-b #{finish_branch}"]
-
+          syscall(
+            ["git fetch origin #{working_branch}"],
+            ["git checkout #{working_branch}"],
+            ["git checkout -b #{finish_branch}"]
+          )
           sysecho <<~MSG
             Branch #{finish_branch} created.
 
@@ -256,7 +257,7 @@ module Discharger
 
           pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
 
-          continue = syscall ["git", "push", "origin", finish_branch, "--force"] do
+          continue = syscall ["git push origin #{finish_branch} --force"] do
             sysecho <<~MSG
               Branch #{finish_branch} created.
               Open a PR to #{working_branch} to finalize the release.
@@ -269,7 +270,7 @@ module Discharger
             MSG
           end
           if continue
-            syscall ["git", "checkout", working_branch],
+            syscall ["git checkout #{working_branch}"],
               ["open", pr_url]
           end
         end
@@ -306,7 +307,7 @@ module Discharger
 
             Once the PR is **approved**, run 'rake release' to release the version.
           MSG
-          syscall ["open", pr_url]
+          syscall ["open #{pr_url}"]
         end
       end
     end

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.2] - Unreleased
 
+### Fixed
+
+- Fix incorrect arguments for the Open3.capture3 usage in the `discharger` tasks.
+
 ## [0.2.1] - 2024-09-16
 
 ### Changed
