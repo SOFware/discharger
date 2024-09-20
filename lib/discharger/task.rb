@@ -147,7 +147,7 @@ module Discharger
           ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
           ["git push origin v#{current_version}"]
         ) do
-          tasker["#{name}:slack"].invoke("Released #{Qualify.name} #{current_version} to production.", release_message_channel, ":chipmunk:")
+          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} to production.", release_message_channel, ":chipmunk:")
           syscall ["git checkout #{working_branch}"]
         end
 
