@@ -184,6 +184,18 @@ module Discharger
       end
 
       namespace name do
+        desc "Echo the configuration settings."
+        task :config do
+          sysecho "-- Discharger Configuration --".bg(:green).black
+          sysecho "SHA: #{commit_identifier.call}".bg(:red).black
+          instance_variables.sort.each do |var|
+            value = instance_variable_get(var)
+            value = value.call if value.is_a?(Proc) && value.arity.zero?
+            sysecho "#{var.to_s.sub("@", "").ljust(24)}: #{value}".bg(:yellow).black
+          end
+          sysecho "----------------------------------".bg(:green).black
+        end
+
         desc description
         task build: :environment do
           syscall(
