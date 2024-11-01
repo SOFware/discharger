@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.4] - Unreleased
 
+### Added
+
+- Add `release:config` task to display the configuration settings.
+
 ## [0.2.3] - 2024-09-20
 
 ### Fixed

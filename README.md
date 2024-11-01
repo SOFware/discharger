@@ -26,6 +26,7 @@ It will make Rake tasks available to push code to branches and notify Slack chan
 $ rake -T release
 rake release                            # ---------- STEP 3 ----------
 rake release:build                      # Release the current version to stage
+rake release:config                     # Echo the configuration settings
 rake release:prepare                    # ---------- STEP 1 ----------
 rake release:slack[text,channel,emoji]  # Send a message to Slack
 rake release:stage                      # ---------- STEP 2 ----------

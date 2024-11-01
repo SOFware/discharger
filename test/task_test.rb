@@ -67,6 +67,7 @@ class DischargerTaskTest < Minitest::Test
     assert_equal [
       "release",
       "release:build",
+      "release:config",
       "release:prepare",
       "release:slack",
       "release:stage"
