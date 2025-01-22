@@ -38,13 +38,11 @@ module Discharger
     attr_accessor :pull_request_url
 
     # Reissue settings
-    attr_accessor :version_file
-    attr_accessor :version_limit
-    attr_accessor :version_redo_proc
-    attr_accessor :changelog_file
-    attr_accessor :updated_paths
-    attr_accessor :commit
-    attr_accessor :commit_finalize
+    attr_accessor(
+      *Reissue::Task.instance_methods(false).reject { |method|
+        method.to_s.match?(/[\?=]\z/) || method_defined?(method)
+      }
+    )
 
     def initialize(name = :release, tasker: Rake::Task)
       @name = name

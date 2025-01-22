@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.5] - Unreleased
 
+### Changed
+
+- Allow all Reissue::Task methods to be set as attributes.
+
 ## [0.2.4] - 2024-11-01
 
 ### Added
