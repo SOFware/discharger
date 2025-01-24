@@ -140,7 +140,7 @@ module Discharger
           ["git branch -D #{production_branch} 2>/dev/null || true"],
           ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
           ["git checkout #{production_branch}"],
-          ["git rebase #{staging_branch}"],
+          ["git reset --hard #{staging_branch}"],
           ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
           ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
           ["git push origin v#{current_version}"]
