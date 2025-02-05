@@ -16,3 +16,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - Reset the production branch to the staging branch instead of rebasing.
+- Deploy slack message now threads the changelog for the release.

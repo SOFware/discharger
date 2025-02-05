@@ -37,6 +37,8 @@ module Discharger
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
 
+    attr_reader :last_message_ts
+
     # Reissue settings
     attr_accessor(
       *Reissue::Task.instance_methods(false).reject { |method|
@@ -146,6 +148,11 @@ module Discharger
           ["git push origin v#{current_version}"]
         ) do
           tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} to production.", release_message_channel, ":chipmunk:")
+          if last_message_ts.present?
+            text = File.read(Rails.root.join(changelog_file))
+            tasker["#{name}:slack"].reenable
+            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
+          end
           syscall ["git checkout #{working_branch}"]
         end
 
@@ -209,7 +216,7 @@ module Discharger
         end
 
         desc "Send a message to Slack."
-        task :slack, [:text, :channel, :emoji] => :environment do |_, args|
+        task :slack, [:text, :channel, :emoji, :ts] => :environment do |_, args|
           args.with_defaults(
             channel: release_message_channel,
             emoji: nil
@@ -217,9 +224,11 @@ module Discharger
           client = Slack::Web::Client.new
           options = args.to_h
           options[:icon_emoji] = options.delete(:emoji) if options[:emoji]
+          options[:thread_ts] = options.delete(:ts) if options[:ts]
 
           sysecho "Sending message to Slack:".bg(:green).black + " #{args[:text]}"
           result = client.chat_postMessage(**options)
+          instance_variable_set(:@last_message_ts, result["ts"])
           sysecho %(Message sent: #{result["ts"]})
         end
 
