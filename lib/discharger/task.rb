@@ -37,6 +37,8 @@ module Discharger
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
 
+    attr_reader :last_message_ts
+
     # Reissue settings
     attr_accessor(
       *Reissue::Task.instance_methods(false).reject { |method|
@@ -125,60 +127,64 @@ module Discharger
       DESC
       task "#{name}": [:environment] do
         current_version = Object.const_get(version_constant)
-        sysecho <<~MSG
-          Releasing version #{current_version} to production.
+        # sysecho <<~MSG
+        #   Releasing version #{current_version} to production.
 
-          This will tag the current version and push it to the production branch.
-        MSG
-        sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-        input = $stdin.gets
-        exit if input.chomp.match?(/^x/i)
+        #   This will tag the current version and push it to the production branch.
+        # MSG
+        # sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
+        # input = $stdin.gets
+        # exit if input.chomp.match?(/^x/i)
 
-        continue = syscall(
-          ["git checkout #{working_branch}"],
-          ["git branch -D #{staging_branch} 2>/dev/null || true"],
-          ["git branch -D #{production_branch} 2>/dev/null || true"],
-          ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
-          ["git checkout #{production_branch}"],
-          ["git reset --hard #{staging_branch}"],
-          ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
-          ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
-          ["git push origin v#{current_version}"]
-        ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} to production.", release_message_channel, ":chipmunk:")
-          syscall ["git checkout #{working_branch}"]
+        # continue = syscall(
+        #   ["git checkout #{working_branch}"],
+        #   ["git branch -D #{staging_branch} 2>/dev/null || true"],
+        #   ["git branch -D #{production_branch} 2>/dev/null || true"],
+        #   ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
+        #   ["git checkout #{production_branch}"],
+        #   ["git reset --hard #{staging_branch}"],
+        #   ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
+        #   ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
+        #   ["git push origin v#{current_version}"]
+        # ) do
+        tasker["#{name}:slack"].invoke("FAKE RELEASE #{app_name} #{current_version} test.", "#qualify-shenanigans", ":large_green_circle:")
+        if last_message_ts.present?
+          text = File.read(Rails.root.join(changelog_file))
+          tasker["#{name}:slack"].invoke(text, release_message_channel, ":chipmunk:", last_message_ts)
         end
+        # syscall ["git checkout #{working_branch}"]
+        # end
 
-        abort "Release failed." unless continue
+        # abort "Release failed." unless continue
 
-        sysecho <<~MSG
-          Version #{current_version} released to production.
+        # sysecho <<~MSG
+        #   Version #{current_version} released to production.
 
-          Preparing to bump the version for the next release.
+        #   Preparing to bump the version for the next release.
 
-        MSG
+        # MSG
 
-        tasker["reissue"].invoke
-        new_version = Object.const_get(version_constant)
-        new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
-        continue = syscall(["git checkout -b #{new_version_branch}"])
+        # tasker["reissue"].invoke
+        # new_version = Object.const_get(version_constant)
+        # new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
+        # continue = syscall(["git checkout -b #{new_version_branch}"])
 
-        abort "Bump failed." unless continue
+        # abort "Bump failed." unless continue
 
-        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
+        # pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
 
-        syscall(["git push origin #{new_version_branch} --force"]) do
-          sysecho <<~MSG
-            Branch #{new_version_branch} created.
+        # syscall(["git push origin #{new_version_branch} --force"]) do
+        #   sysecho <<~MSG
+        #     Branch #{new_version_branch} created.
 
-            Open a PR to #{working_branch} to mark the version and update the chaneglog
-            for the next release.
+        #     Open a PR to #{working_branch} to mark the version and update the chaneglog
+        #     for the next release.
 
-            Opening PR: #{pr_url}
-          MSG
-        end.then do |success|
-          syscall ["open #{pr_url}"] if success
-        end
+        #     Opening PR: #{pr_url}
+        #   MSG
+        # end.then do |success|
+        #   syscall ["open #{pr_url}"] if success
+        # end
       end
 
       namespace name do
@@ -209,7 +215,7 @@ module Discharger
         end
 
         desc "Send a message to Slack."
-        task :slack, [:text, :channel, :emoji] => :environment do |_, args|
+        task :slack, [:text, :channel, :emoji, :ts] => :environment do |_, args|
           args.with_defaults(
             channel: release_message_channel,
             emoji: nil
@@ -217,9 +223,11 @@ module Discharger
           client = Slack::Web::Client.new
           options = args.to_h
           options[:icon_emoji] = options.delete(:emoji) if options[:emoji]
+          options[:thread_ts] = options.delete(:ts) if options[:ts]
 
           sysecho "Sending message to Slack:".bg(:green).black + " #{args[:text]}"
           result = client.chat_postMessage(**options)
+          instance_variable_set(:@last_message_ts, result["ts"])
           sysecho %(Message sent: #{result["ts"]})
         end
 
