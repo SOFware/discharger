@@ -3,7 +3,7 @@ require_relative "lib/discharger/version"
 Gem::Specification.new do |spec|
   spec.name = "discharger"
   spec.version = Discharger::VERSION
-  spec.authors = ["Jim Gay"]
+  spec.authors = ["Jim Gay", "Savannah Moore"]
   spec.email = ["jim@saturnflyer.com"]
   spec.homepage = "https://github.com/SOFware/discharger"
   spec.summary = "Tasks for discharging an application for deployment."
