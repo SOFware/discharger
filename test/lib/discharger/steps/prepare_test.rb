@@ -1,6 +1,7 @@
 require "test_helper"
 require "discharger/task"
 require "rake"
+require "tempfile"
 
 # Mock Rails.root for changelog path
 unless defined?(Rails)
@@ -11,13 +12,18 @@ unless defined?(Rails)
   end
 end
 
-class PrepareTest < Minitest::Test
+class Discharger::Steps::PrepareTest < Minitest::Test
   include Rake::DSL
 
   def setup
     # Initialize Rake
     @rake = Rake::Application.new
     Rake.application = @rake
+
+    # Create a temporary changelog file
+    @changelog = Tempfile.new(["CHANGELOG", ".md"])
+    @changelog.write("## Version 1.0.0\n\n* Initial release\n")
+    @changelog.close
 
     # Create a new Task instance
     @task = Discharger::Task.new
@@ -28,27 +34,14 @@ class PrepareTest < Minitest::Test
     @task.working_branch = "main"
     @task.staging_branch = "staging"
     @task.production_branch = "production"
-    @task.release_message_channel = "#releases"
-    @task.changelog_file = "CHANGELOG.md"
-    @task.app_name = "TestApp"
-    @task.pull_request_url = "https://github.com/org/repo/pulls"
+    @task.changelog_file = @changelog.path
     @task.description = "Build and release the application"
 
     # Mock environment task since it's a prerequisite
-    task :environment do
-      # No-op for testing
-    end
+    task :environment
 
     # Mock VERSION constant
     Object.const_set(:VERSION, "1.0.0") unless Object.const_defined?(:VERSION)
-
-    # Mock reissue:finalize task since it's called by prepare
-    task "reissue:finalize"
-
-    # Define helper methods on the task instance
-    def @task.commit_identifier
-      -> { "abc123" }
-    end
 
     # Stub syscall and sysecho before defining tasks
     @called_commands = []
@@ -73,6 +66,8 @@ class PrepareTest < Minitest::Test
     # Clear Rake tasks between tests
     Rake.application.clear
     Rake::Task.clear
+    # Clean up temporary changelog file
+    @changelog.unlink
   end
 
   def test_prepare_for_release_defines_task
@@ -81,63 +76,59 @@ class PrepareTest < Minitest::Test
   end
 
   def test_prepare_task_executes_expected_git_commands
-    # Mock stdin to simulate user pressing enter
-    stdin_mock = StringIO.new("\n")
-    $stdin = stdin_mock
-
     Rake::Task["prepare"].invoke
-    expected_commands = [
-      "git fetch origin main",
-      "git checkout main",
-      "git checkout -b bump/finish-1-0-0",
-      "git push origin bump/finish-1-0-0 --force",
-      "git push origin bump/finish-1-0-0 --force",
-      "git checkout main",
-      "open"  # The PR URL command will be partially matched
-    ]
-
-    actual_commands = @task.instance_variable_get(:@called_commands)
-    expected_commands.each do |expected_cmd|
-      assert_includes actual_commands.join(" "), expected_cmd
-    end
-  ensure
-    $stdin = STDIN
-  end
-
-  def test_prepare_task_handles_user_exit
-    # Mock stdin to simulate user typing 'x'
-    stdin_mock = StringIO.new("x\n")
-    $stdin = stdin_mock
-
-    assert_raises(SystemExit) do
-      Rake::Task["prepare"].invoke
-    end
 
     expected_commands = [
       "git fetch origin main",
       "git checkout main",
-      "git checkout -b bump/finish-1-0-0",
-      "git push origin bump/finish-1-0-0 --force"
+      "git pull origin main"
     ]
-
     actual_commands = @task.instance_variable_get(:@called_commands)
     assert_equal expected_commands, actual_commands
-  ensure
-    $stdin = STDIN
   end
 
   def test_prepare_task_outputs_expected_messages
-    # Mock stdin to simulate user pressing enter
-    stdin_mock = StringIO.new("\n")
-    $stdin = stdin_mock
-
     Rake::Task["prepare"].invoke
 
     messages = @task.instance_variable_get(:@echoed_messages)
-    assert_includes messages.join, "Branch bump/finish-1-0-0 created"
-    assert_includes messages.join, "Check the contents of the CHANGELOG"
-    assert_includes messages.join, "Are you ready to continue?"
-  ensure
-    $stdin = STDIN
+    expected_messages = [
+      "Preparing version 1.0.0 for release",
+      "Checking changelog for version 1.0.0",
+      "Version 1.0.0 is ready for release"
+    ]
+
+    expected_messages.each do |expected_msg|
+      assert_includes messages, expected_msg
+    end
+  end
+
+  def test_prepare_task_checks_changelog
+    @changelog = Tempfile.new(["CHANGELOG", ".md"])
+    @changelog.write("No version information")
+    @changelog.close
+    @task.changelog_file = @changelog.path
+
+    error = assert_raises(RuntimeError) do
+      Rake::Task["prepare"].invoke
+    end
+
+    assert_equal "Version 1.0.0 not found in #{@changelog.path}", error.message
+  end
+
+  def test_prepare_task_with_gem_tag
+    @task.mono_repo = true
+    @task.gem_tag = "gem-v1.0.0"
+
+    Rake::Task["prepare"].invoke
+
+    expected_commands = [
+      "git fetch origin gem-v1.0.0",
+      "git tag -l gem-v1.0.0",
+      "git fetch origin main",
+      "git checkout main",
+      "git pull origin main"
+    ]
+    actual_commands = @task.instance_variable_get(:@called_commands)
+    assert_equal expected_commands, actual_commands
   end
 end

@@ -1,42 +1,55 @@
 require "rainbow/refinement"
+require "uri"  # Add this for URL encoding
 
 using Rainbow
 
-module Stage
-  def stage_release_branch
-    desc <<~DESC
-      ---------- STEP 2 ----------
-      Stage the release branch
+module Discharger
+  module Steps
+    class Stage
+      def initialize(task)
+        @task = task
+        @tasker = task.tasker
+      end
 
-      This task will update Stage, open a PR, and instruct you on the next steps.
+      def stage_release_branch
+        @task.desc <<~DESC
+          ---------- STEP 2 ----------
+          Stage the current version for release
 
-      NOTE: If you just want to update the stage environment but aren't ready to release, run:
+          This task creates a staging branch from the current working branch and
+          pushes it to the remote repository. A pull request will be opened to merge
+          the staging branch into production.
+        DESC
+        @task.task stage: [:environment, :build] do
+          current_version = Object.const_get(@task.version_constant)
+          @task.sysecho "Branch staging updated"
+          @task.sysecho "Open a PR to production to release the version"
+          @task.sysecho "Once the PR is **approved**, run 'rake release' to release the version"
 
-          bin/rails #{name}:build
-    DESC
-    task stage: [:environment] do
-      tasker["build"].invoke
-      current_version = Object.const_get(version_constant)
+          pr_url = "#{@task.pull_request_url}/compare/#{@task.production_branch}...#{@task.staging_branch}"
+          pr_params = {
+            expand: 1,
+            title: URI.encode_www_form_component("Release #{current_version} to production"),
+            body: URI.encode_www_form_component("Deploy #{current_version} to production.\n")
+          }.map { |k, v| "#{k}=#{v}" }.join("&")
 
-      params = {
-        expand: 1,
-        title: "Release #{current_version} to production",
-        body: <<~BODY
-          Deploy #{current_version} to production.
-        BODY
-      }
+          @task.syscall ["open #{pr_url}?#{pr_params}"]
+        end
+      end
 
-      pr_url = "#{pull_request_url}/compare/#{production_branch}...#{staging_branch}?#{params.to_query}"
+      private
 
-      sysecho <<~MSG
-        Branch #{staging_branch} updated.
-        Open a PR to #{production_branch} to release the version.
+      def method_missing(method_name, *args, &block)
+        if @task.respond_to?(method_name)
+          @task.send(method_name, *args, &block)
+        else
+          super
+        end
+      end
 
-        Opening PR: #{pr_url}
-
-        Once the PR is **approved**, run 'rake release' to release the version.
-      MSG
-      syscall ["open #{pr_url}"]
+      def respond_to_missing?(method_name, include_private = false)
+        @task.respond_to?(method_name, include_private) || super
+      end
     end
   end
 end

@@ -32,7 +32,7 @@ unless defined?(Slack)
   end
 end
 
-class ReleaseTest < Minitest::Test
+class Discharger::Steps::ReleaseTest < Minitest::Test
   include Rake::DSL
 
   def setup
@@ -56,9 +56,7 @@ class ReleaseTest < Minitest::Test
     @task.description = "Build and release the application"
 
     # Mock environment task since it's a prerequisite
-    task :environment do
-      # No-op for testing
-    end
+    task :environment
 
     # Mock VERSION constant
     Object.const_set(:VERSION, "1.0.0") unless Object.const_defined?(:VERSION)
@@ -121,18 +119,21 @@ class ReleaseTest < Minitest::Test
       "git branch -D staging 2>/dev/null || true",
       "git checkout -b staging",
       "git push origin staging --force",
-      "git checkout main"  # This command is called in the block
+      "git checkout main"
     ]
-    assert_equal expected_commands, @task.instance_variable_get(:@called_commands)
+    actual_commands = @task.instance_variable_get(:@called_commands)
+    assert_equal expected_commands, actual_commands
   end
 
   def test_slack_task_with_default_parameters
-    Rake::Task["#{@task.name}:slack"].invoke("Default message", @task.release_message_channel)
-    assert_includes @task.instance_variable_get(:@echoed_messages).to_s, "Sending message to Slack:"
+    Rake::Task["#{@task.name}:slack"].invoke("Test message")
+    messages = @task.instance_variable_get(:@echoed_messages)
+    assert_includes messages.join, "Test message"
   end
 
   def test_slack_task_with_custom_parameters
-    Rake::Task["#{@task.name}:slack"].invoke("Custom message", @task.release_message_channel, ":emoji:", "123.456")
-    assert_includes @task.instance_variable_get(:@echoed_messages).to_s, "Sending message to Slack:"
+    Rake::Task["#{@task.name}:slack"].invoke("Test message", "#custom", ":smile:")
+    messages = @task.instance_variable_get(:@echoed_messages)
+    assert_includes messages.join, "Test message"
   end
 end

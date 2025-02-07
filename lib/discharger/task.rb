@@ -10,10 +10,11 @@ using Rainbow
 
 module Discharger
   class Task < Rake::TaskLib
+    include Rake::DSL
     include SysHelper
-    include Prepare
-    include Stage
-    include Release
+
+    # Make Rake DSL methods public
+    public :desc, :task
 
     def self.create(name = :release, tasker: Rake::Task, &block)
       task = new(name, tasker:)
@@ -32,22 +33,18 @@ module Discharger
     end
 
     attr_accessor :name
-
     attr_accessor :description
-
     attr_accessor :working_branch
     attr_accessor :staging_branch
     attr_accessor :production_branch
-
     attr_accessor :release_message_channel
     attr_accessor :version_constant
-
     attr_accessor :chat_token
     attr_accessor :app_name
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
-
     attr_reader :last_message_ts
+    attr_reader :tasker
 
     # Reissue settings
     attr_accessor(
@@ -56,6 +53,11 @@ module Discharger
       }
     )
 
+    ## Configuration for gem tagging in monorepos
+    attr_accessor :mono_repo
+    attr_accessor :gem_tag
+    attr_accessor :gem_name
+
     def initialize(name = :release, tasker: Rake::Task)
       @name = name
       @tasker = tasker
@@ -63,8 +65,11 @@ module Discharger
       @staging_branch = "stage"
       @production_branch = "main"
       @description = "Release the current version to #{staging_branch}"
+      @mono_repo = false
+      @release = Steps::Release.new(self)
+      @stage = Steps::Stage.new(self)
+      @prepare = Steps::Prepare.new(self)
     end
-    private attr_reader :tasker
 
     def define
       require "slack-ruby-client"
@@ -72,9 +77,22 @@ module Discharger
         config.token = chat_token
       end
 
-      release_to_production
-      prepare_for_release
-      stage_release_branch
+      @release.release_to_production
+      @stage.stage_release_branch
+      @prepare.prepare_for_release
+    end
+
+    # Delegate release-related attributes to the Release object
+    def method_missing(method_name, *args, &block)
+      if @release.respond_to?(method_name)
+        @release.send(method_name, *args, &block)
+      else
+        super
+      end
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      @release.respond_to?(method_name, include_private) || super
     end
   end
 end

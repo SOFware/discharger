@@ -11,7 +11,7 @@ unless defined?(Rails)
   end
 end
 
-class StageTest < Minitest::Test
+class Discharger::Steps::StageTest < Minitest::Test
   include Rake::DSL
 
   def setup
@@ -35,22 +35,11 @@ class StageTest < Minitest::Test
     @task.description = "Build and release the application"
 
     # Mock environment task since it's a prerequisite
-    task :environment do
-      # No-op for testing
-    end
-
-    # Mock build tasks since they're called by stage
-    task :build    # Mock the main build task
-    task "build"   # Mock the string version of build task
-    task "#{@task.name}:build"  # Mock the namespaced build task
+    task :environment
+    task :build
 
     # Mock VERSION constant
     Object.const_set(:VERSION, "1.0.0") unless Object.const_defined?(:VERSION)
-
-    # Define helper methods on the task instance
-    def @task.commit_identifier
-      -> { "abc123" }
-    end
 
     # Stub syscall and sysecho before defining tasks
     @called_commands = []
@@ -82,31 +71,12 @@ class StageTest < Minitest::Test
     assert_includes task_names, "stage"
   end
 
-  def test_stage_task_invokes_build_task
-    build_task_called = false
-    Rake::Task["build"].enhance do
-      build_task_called = true
-    end
-
-    Rake::Task["stage"].invoke
-    assert build_task_called, "Build task should have been called"
-  end
-
   def test_stage_task_executes_expected_commands
     Rake::Task["stage"].invoke
 
-    expected_url_parts = [
-      "open",
-      "https://github.com/org/repo/pulls/compare/production...staging",
-      "expand=1",
-      "title=Release+1.0.0+to+production",
-      "body=Deploy+1.0.0+to+production"
-    ]
-
+    expected_url = "open https://github.com/org/repo/pulls/compare/production...staging"
     actual_commands = @task.instance_variable_get(:@called_commands)
-    expected_url_parts.each do |part|
-      assert_includes actual_commands.join(" "), part
-    end
+    assert_includes actual_commands.join(" "), expected_url
   end
 
   def test_stage_task_outputs_expected_messages
@@ -131,5 +101,13 @@ class StageTest < Minitest::Test
     url = actual_commands.join(" ")
     assert_includes url, "title=Release+1.0.0+to+production"
     assert_includes url, "body=Deploy+1.0.0+to+production"
+  end
+
+  def test_stage_task_invokes_build_task
+    build_invoked = false
+    Rake::Task[:build].enhance { build_invoked = true }
+
+    Rake::Task["stage"].invoke
+    assert build_invoked, "Build task should be invoked"
   end
 end
