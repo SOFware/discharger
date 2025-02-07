@@ -1,6 +1,7 @@
 require "test_helper"
 require "discharger/task"
 require "rake"
+require "tempfile"
 
 # Mock Rails.root for changelog path
 unless defined?(Rails)
@@ -135,5 +136,49 @@ class Discharger::Steps::ReleaseTest < Minitest::Test
     Rake::Task["#{@task.name}:slack"].invoke("Test message", "#custom", ":smile:")
     messages = @task.instance_variable_get(:@echoed_messages)
     assert_includes messages.join, "Test message"
+  end
+
+  def test_tagging_a_gem
+    original_changelog = @task.changelog_file
+
+    @task.mono_repo = true
+    @task.gem_tag = "gem-v1.0.0"
+
+    # Mock gets method to return 'y'
+    def $stdin.gets
+      "y\n"
+    end
+
+    begin
+      # Clear and redefine tasks while preserving setup state
+      Rake.application.clear
+      Rake::Task.clear
+
+      # Re-mock prerequisite tasks
+      task :environment
+      task :reissue
+      task :build
+      task :slack
+      task :config
+
+      # Mock VERSION constant again
+      Object.const_set(:VERSION, "1.0.0") unless Object.const_defined?(:VERSION)
+
+      @task.define
+      Rake::Task["#{@task.name}"].invoke
+
+      # Use instance variables set in setup
+      assert_includes @echoed_messages.join, "Would you like to tag and release"
+      assert_includes @called_commands, "git tag gem-v1.0.0"
+      assert_includes @called_commands, "git push --tags"
+      assert_includes @echoed_messages.join, "Successfully tagged and pushed gem-v1.0.0"
+    ensure
+      # Remove the mock method
+      class << $stdin
+        remove_method :gets
+      end
+      # Restore original values
+      @task.changelog_file = original_changelog
+    end
   end
 end
