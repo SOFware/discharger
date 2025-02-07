@@ -17,7 +17,36 @@ if ActiveSupport::TestCase.respond_to?(:fixture_paths=)
   ActiveSupport::TestCase.fixtures :all
 end
 
+require "discharger/helpers/sys_helper"
 require "discharger"
 require "discharger/task"
 
 require "debug"
+
+require "bundler/setup"
+require "minitest/autorun"
+require "minitest/mock"
+require "rake"
+
+# Add the lib directory to the load path
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+
+# Require any support files
+Dir[File.expand_path("support/**/*.rb", __dir__)].each { |f| require f }
+
+# Configure minitest reporter if you want prettier output
+require "minitest/reporters"
+Minitest::Reporters.use! [Minitest::Reporters::DefaultReporter.new(color: true)]
+
+# Add near the top of the file
+TEST_GIT_COMMANDS = ENV["TEST_GIT_COMMANDS"] == "true"
+
+# Reset Rake tasks before each test
+module Minitest
+  class Test
+    def setup
+      Rake::Task.clear
+      super
+    end
+  end
+end

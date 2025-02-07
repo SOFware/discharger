@@ -10,3 +10,7 @@ gem "sqlite3"
 gem "simplecov"
 # Release management
 gem "reissue"
+
+group :development, :test do
+  gem "minitest-reporters"
+end
