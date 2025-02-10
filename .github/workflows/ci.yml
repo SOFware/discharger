@@ -52,4 +52,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.version }}
           bundler-cache: true
+      - name: Update Bundle
+        run: bundle check || bundle install
       - run: bundle exec standardrb
