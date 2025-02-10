@@ -40,7 +40,7 @@ module Discharger
 
             This will tag the current version and push it to the production branch.
           MSG
-          @task.sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
+          @task.sysecho "Are you ready to continue? (Press Enter to continue)".bg(:yellow).black
           input = $stdin.gets
           exit if input.chomp.match?(/^x/i)
 
@@ -77,33 +77,87 @@ module Discharger
 
           @task.sysecho <<~MSG
             Version #{current_version} released to production.
-
-            Preparing to bump the version for the next release.
-
           MSG
 
-          @tasker["reissue"].invoke
-          new_version = Object.const_get(@task.version_constant)
-          new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
-          continue = @task.syscall(["git checkout -b #{new_version_branch}"])
+          prepare_next_version
+        end
+      end
 
-          abort "Bump failed." unless continue
+      def prepare_next_version
+        tagging_a_gem if @task.mono_repo
 
-          pr_url = "#{@task.pull_request_url}/compare/#{@task.working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
+        @task.sysecho <<~MSG
+          Preparing to bump the version for the next release.
 
-          @task.syscall(["git push origin #{new_version_branch} --force"]) do
-            @task.sysecho <<~MSG
-              Branch #{new_version_branch} created.
+        MSG
 
-              Open a PR to #{@task.working_branch} to mark the version and update the chaneglog
-              for the next release.
+        @tasker["reissue"].invoke
+        new_version = Object.const_get(@task.version_constant)
+        new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
+        continue = @task.syscall(["git checkout -b #{new_version_branch}"])
 
-              Opening PR: #{pr_url}
-            MSG
-          end.then do |success|
-            @task.syscall ["open #{pr_url}"] if success
+        abort "Bump failed." unless continue
+
+        pr_url = "#{@task.pull_request_url}/compare/#{@task.working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
+        @task.syscall(["git push origin #{new_version_branch} --force"]) do
+          @task.sysecho <<~MSG
+            Branch #{new_version_branch} created.
+
+            Open a PR to #{@task.working_branch} to mark the version and update the chaneglog
+            for the next release.
+
+            Opening PR: #{pr_url}
+          MSG
+        end.then do |success|
+          @task.syscall ["open #{pr_url}"] if success
+        end
+      end
+
+      def tagging_a_gem
+        @task.sysecho <<~MSG.bg(:yellow).black
+          Would you like to tag and release #{@task.gem_tag} of the #{@task.gem_name} gem?
+
+          Type 'y' to tag and release, or just press Enter to continue without.
+        MSG
+
+        input = $stdin.gets
+        tagging_gem = input.chomp.match?(/^y/i)
+
+        if tagging_gem
+          if @task.syscall(
+            ["git tag #{@task.gem_tag}"],
+            ["git push --tags"]
+          )
+            @task.sysecho "Successfully tagged and pushed #{@task.gem_tag}"
+            update_gem_version
+          else
+            manually_push_tag_warning
           end
         end
+      end
+
+      def update_gem_version
+
+      end
+
+      def manually_push_tag_warning
+        @task.sysecho <<~MSG.bg(:red)
+          Warning: Failed to tag and push #{@task.gem_tag}
+
+          Release flow must continue, and tagging will need to be done manually.
+          Follow these steps:
+          1) Manually push the tags.
+            `git tag #{@task.gem_tag}`
+            `git push --tags`
+          2) Verify
+            - go to the workflows page
+            - go to the gem page that lists versions
+            - confirm that the tag released
+          3) Prepare for the next release
+            - update the gem version file to the next version
+            - `bundle install`
+            - PR
+        MSG
       end
 
       def establish_config
