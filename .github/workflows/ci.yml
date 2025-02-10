@@ -54,4 +54,4 @@ jobs:
           bundler-cache: true
       - name: Update Bundle
         run: bundle check || bundle install
-      - run: bundle exec standard
+      - run: bundle exec standardrb
