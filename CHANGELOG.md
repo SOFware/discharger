@@ -7,3 +7,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.8] - Unreleased
 
+### Changed
+
+- Hard reset the local working branch to the remote branch after fetching.
