@@ -206,6 +206,7 @@ module Discharger
           syscall(
             ["git fetch origin #{working_branch}"],
             ["git checkout #{working_branch}"],
+            ["git reset --hard origin/#{working_branch}"],
             ["git branch -D #{staging_branch} 2>/dev/null || true"],
             ["git checkout -b #{staging_branch}"],
             ["git push origin #{staging_branch} --force"]
