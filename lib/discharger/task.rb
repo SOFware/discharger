@@ -147,7 +147,7 @@ module Discharger
           ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
           ["git push origin v#{current_version}"]
         ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} to production.", release_message_channel, ":chipmunk:")
+          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
           if last_message_ts.present?
             text = File.read(Rails.root.join(changelog_file))
             tasker["#{name}:slack"].reenable
@@ -211,7 +211,7 @@ module Discharger
             ["git checkout -b #{staging_branch}"],
             ["git push origin #{staging_branch} --force"]
           ) do
-            tasker["#{name}:slack"].invoke("Building #{app_name} #{commit_identifier.call} on #{staging_branch}.", release_message_channel)
+            tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
             syscall ["git checkout #{working_branch}"]
           end
         end
