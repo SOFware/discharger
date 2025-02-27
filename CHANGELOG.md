@@ -10,3 +10,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - Hard reset the local working branch to the remote branch after fetching.
+- Build and release messages now include the version and commit identifier.
