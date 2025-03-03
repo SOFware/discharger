@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.9] - Unreleased
 
+### Fixed
+
+- Fixed a bug where the current_version was not properly loaded.
+
 ## [0.2.8] - 2025-02-27
 
 ### Changed

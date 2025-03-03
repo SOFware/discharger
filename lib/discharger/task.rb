@@ -211,6 +211,7 @@ module Discharger
             ["git checkout -b #{staging_branch}"],
             ["git push origin #{staging_branch} --force"]
           ) do
+            current_version = Object.const_get(version_constant)
             tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
             syscall ["git checkout #{working_branch}"]
           end
