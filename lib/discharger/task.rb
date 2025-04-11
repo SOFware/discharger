@@ -164,13 +164,9 @@ module Discharger
           Preparing to bump the version for the next release.
 
         MSG
-
         tasker["reissue"].invoke
-        new_version = Object.const_get(version_constant)
-        new_version_branch = "bump/begin-#{new_version.tr(".", "-")}"
-        continue = syscall(["git checkout -b #{new_version_branch}"])
 
-        abort "Bump failed." unless continue
+        new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
 
         pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
 
