@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.10] - Unreleased
 
+### Fixed
+
+- Fixed the incorrectly named new version branch.
+
 ## [0.2.9] - 2025-03-03
 
 ### Fixed
