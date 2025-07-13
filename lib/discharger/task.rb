@@ -37,6 +37,11 @@ module Discharger
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
 
+    # Changelog fragments configuration
+    attr_accessor :changelog_fragments_enabled
+    attr_accessor :changelog_fragments_dir
+    attr_accessor :changelog_sections
+
     attr_reader :last_message_ts
 
     # Reissue settings
@@ -53,6 +58,9 @@ module Discharger
       @staging_branch = "stage"
       @production_branch = "main"
       @description = "Release the current version to #{staging_branch}"
+      @changelog_fragments_enabled = false
+      @changelog_fragments_dir = "changelog/unreleased"
+      @changelog_sections = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
     end
     private attr_reader :tasker
 
@@ -106,6 +114,85 @@ module Discharger
     def sysecho(message, output: $stdout)
       output.puts message
       true
+    end
+
+    # Process changelog fragments and update the changelog file
+    def process_changelog_fragments
+      return unless changelog_fragments_enabled
+      return unless Dir.exist?(changelog_fragments_dir)
+
+      fragments_by_section = {}
+
+      Dir.glob(File.join(changelog_fragments_dir, "*.md")).each do |fragment_file|
+        filename = File.basename(fragment_file, ".md")
+        section = filename.split(".").first
+
+        # Find matching section name (case-insensitive)
+        matched_section = changelog_sections.find { |s| s.downcase == section.downcase }
+        next unless matched_section
+
+        content = File.read(fragment_file).strip
+        next if content.empty?
+
+        fragments_by_section[matched_section] ||= []
+        fragments_by_section[matched_section] << content
+      end
+
+      return if fragments_by_section.empty?
+
+      # Read current changelog
+      changelog_content = File.read(changelog_file)
+
+      # Find the unreleased section
+      unreleased_match = changelog_content.match(/^## \[.*?\] - Unreleased\s*$/m)
+      return unless unreleased_match
+
+      unreleased_line_end = unreleased_match.end(0)
+
+      # Find the next section (or end of file)
+      next_section_match = changelog_content.match(/^## \[.*?\] - \d{4}-\d{2}-\d{2}/m, unreleased_line_end)
+      insert_position = next_section_match ? next_section_match.begin(0) : changelog_content.length
+
+      # Build the new content to insert
+      new_content = []
+      changelog_sections.each do |section|
+        next unless fragments_by_section[section]
+
+        new_content << "\n### #{section}\n"
+        fragments_by_section[section].each do |fragment|
+          # Ensure fragment content starts with bullets
+          lines = fragment.split("\n")
+          lines.each do |line|
+            line = line.strip
+            next if line.empty?
+            # Only add bullet if line doesn't already start with one
+            unless line.start_with?("- ", "* ")
+              line = "- #{line}"
+            end
+            new_content << "#{line}\n"
+          end
+        end
+      end
+
+      # Insert the new content
+      unless new_content.empty?
+        updated_changelog = changelog_content[0...insert_position] +
+          new_content.join +
+          "\n" +
+          changelog_content[insert_position..]
+
+        File.write(changelog_file, updated_changelog)
+
+        # Remove processed fragment files
+        Dir.glob(File.join(changelog_fragments_dir, "*.md")).each do |fragment_file|
+          filename = File.basename(fragment_file, ".md")
+          section = filename.split(".").first
+          matched_section = changelog_sections.find { |s| s.downcase == section.downcase }
+          File.delete(fragment_file) if matched_section
+        end
+
+        sysecho "Processed changelog fragments and updated #{changelog_file}"
+      end
     end
 
     def define
@@ -230,6 +317,37 @@ module Discharger
           sysecho %(Message sent: #{result["ts"]})
         end
 
+        desc "List all changelog fragments"
+        task :fragments do
+          if changelog_fragments_enabled && Dir.exist?(changelog_fragments_dir)
+            fragments = Dir.glob(File.join(changelog_fragments_dir, "*.md"))
+            if fragments.empty?
+              sysecho "No changelog fragments found in #{changelog_fragments_dir}"
+            else
+              sysecho "Changelog fragments:".bg(:green).black
+              fragments.sort.each do |fragment|
+                filename = File.basename(fragment, ".md")
+                section = filename.split(".").first
+                summary = filename.split(".")[1..].join(".")
+                content = File.read(fragment).strip.split("\n").first
+
+                # Find matching section name (case-insensitive)
+                matched_section = changelog_sections.find { |s| s.downcase == section.downcase }
+                display_section = matched_section || "#{section} (INVALID)"
+
+                sysecho "  #{display_section.ljust(12)} | #{summary.ljust(30)} | #{content}"
+              end
+            end
+          else
+            sysecho "Changelog fragments are not enabled or directory doesn't exist"
+          end
+        end
+
+        desc "Process changelog fragments manually (for testing)"
+        task :process_fragments do
+          process_changelog_fragments
+        end
+
         desc <<~DESC
           ---------- STEP 1 ----------
           Prepare the current version for release to production (#{production_branch})
@@ -261,6 +379,9 @@ module Discharger
           sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
           input = $stdin.gets
           exit if input.chomp.match?(/^x/i)
+
+          # Process changelog fragments before finalizing
+          process_changelog_fragments
 
           tasker["reissue:finalize"].invoke
 
