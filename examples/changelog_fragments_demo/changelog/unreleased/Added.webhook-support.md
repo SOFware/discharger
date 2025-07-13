@@ -1,0 +1,2 @@
+- Added webhook support for real-time notifications
+- Implemented webhook retry mechanism with exponential backoff

@@ -1,0 +1,2 @@
+- Enhanced CSRF protection with SameSite cookie attributes
+- Added additional validation for cross-origin requests

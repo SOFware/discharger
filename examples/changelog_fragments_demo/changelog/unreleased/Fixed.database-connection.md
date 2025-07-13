@@ -1,0 +1,1 @@
+Fixed database connection pool exhaustion during high traffic periods
