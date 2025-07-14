@@ -58,6 +58,11 @@ jobs:
           git checkout -b $branch_name
           echo "branch_name=$branch_name" >> $GITHUB_ENV
       
+      - name: Disable bundler deployment mode
+        run: |
+          bundle config unset deployment
+          bundle config unset frozen
+
       - name: Run reissue task
         run: |
           bundle exec rake reissue[${{ steps.version.outputs.version }}]
