@@ -1,0 +1,18 @@
+current directory: /home/runner/work/discharger/discharger/vendor/bundle/ruby/3.4.0/gems/erb-5.0.1/ext/erb/escape
+/opt/hostedtoolcache/Ruby/3.4.4/x64/bin/ruby extconf.rb
+creating Makefile
+
+current directory: /home/runner/work/discharger/discharger/vendor/bundle/ruby/3.4.0/gems/erb-5.0.1/ext/erb/escape
+make DESTDIR\= sitearchdir\=./.gem.20250624-1964-u8jqee sitelibdir\=./.gem.20250624-1964-u8jqee clean
+
+current directory: /home/runner/work/discharger/discharger/vendor/bundle/ruby/3.4.0/gems/erb-5.0.1/ext/erb/escape
+make DESTDIR\= sitearchdir\=./.gem.20250624-1964-u8jqee sitelibdir\=./.gem.20250624-1964-u8jqee
+compiling escape.c
+linking shared-object erb/escape.so
+
+current directory: /home/runner/work/discharger/discharger/vendor/bundle/ruby/3.4.0/gems/erb-5.0.1/ext/erb/escape
+make DESTDIR\= sitearchdir\=./.gem.20250624-1964-u8jqee sitelibdir\=./.gem.20250624-1964-u8jqee install
+/usr/bin/install -c -m 0755 escape.so ./.gem.20250624-1964-u8jqee/erb
+
+current directory: /home/runner/work/discharger/discharger/vendor/bundle/ruby/3.4.0/gems/erb-5.0.1/ext/erb/escape
+make DESTDIR\= sitearchdir\=./.gem.20250624-1964-u8jqee sitelibdir\=./.gem.20250624-1964-u8jqee clean
