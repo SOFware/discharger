@@ -1,0 +1,37 @@
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  push:
+    name: Push gem to RubyGems.org
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'approved-release')
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      # Set up
+      - name: Setup Git
+        run: |
+          git config --global user.email "gems@sofwarellc.com"
+          git config --global user.name "SOFware"
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: ruby
+
+      # Release
+      - name: Release gem
+        run: bundle exec rake release
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
