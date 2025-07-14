@@ -2,21 +2,6 @@ name: Prepare Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (major, minor, patch, or specific version like 1.2.3)'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - major
-          - minor
-          - patch
-          - custom
-      custom_version:
-        description: 'Custom version (only used if version is set to "custom")'
-        required: false
-        type: string
 
 jobs:
   prepare:
@@ -43,65 +28,56 @@ jobs:
           bundler-cache: true
           ruby-version: ruby
       
-      - name: Determine version
-        id: version
+      - name: Get current version
+        id: current_version
         run: |
-          if [[ "${{ github.event.inputs.version }}" == "custom" ]]; then
-            echo "version=${{ github.event.inputs.custom_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Create release branch
-        run: |
-          branch_name="release/v${{ steps.version.outputs.version }}-$(date +%Y%m%d%H%M%S)"
-          git checkout -b $branch_name
-          echo "branch_name=$branch_name" >> $GITHUB_ENV
+          current_version=$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')
+          echo "current_version=$current_version" >> $GITHUB_OUTPUT
       
       - name: Disable bundler deployment mode
         run: |
           bundle config unset deployment
           bundle config unset frozen
 
-      - name: Run reissue task
+      - name: Prepare release with Reissue
         run: |
-          bundle exec rake reissue[${{ steps.version.outputs.version }}]
+          bundle exec rake reissue
       
       - name: Build gem
         run: |
           bundle exec rake build:checksum
       
-      - name: Push changes
-        run: |
-          git push origin ${{ env.branch_name }}
-      
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ env.branch_name }}
+          branch: release/v${{ steps.current_version.outputs.current_version }}
           base: main
-          title: "Release: ${{ steps.version.outputs.version }}"
+          title: "Release v${{ steps.current_version.outputs.current_version }}"
           body: |
             ## 🚀 Release Preparation
             
-            This PR prepares the release for version ${{ steps.version.outputs.version }}.
+            This PR finalizes the release for version ${{ steps.current_version.outputs.current_version }}.
             
-            ### Checklist
-            - [ ] Version updated in `lib/discharger/version.rb`
-            - [ ] CHANGELOG.md updated with release notes
-            - [ ] Gem builds successfully
-            - [ ] All tests pass
+            ### Changes Made
+            - ✅ CHANGELOG.md finalized with release date
+            - ✅ Gem built successfully with checksum
+            - ✅ Release branch created automatically by Reissue
             
             ### Next Steps
-            1. Review the changes
-            2. Ensure all release notes are accurate
-            3. Approve and merge this PR
-            4. The `release-gem` workflow will automatically publish to RubyGems.org
+            1. Review the changelog to ensure all changes are documented
+            2. Verify the version is correct
+            3. Add the `approved-release` label to this PR
+            4. Merge the PR
+
+            Once merged:
+            - The release workflow will automatically publish to RubyGems.org
+            - A new version will be created in version.rb
+            - The changelog will be prepared for the next release
             
             ---
             
-            To approve this release, add the `approved-release` label to this PR.
+            ⚠️ **Important**: Only add the `approved-release` label when ready to publish!
           labels: |
             release
             automated
