@@ -30,7 +30,10 @@ jobs:
           bundler-cache: true
           ruby-version: ruby
 
-      # Release
+      # Build and Release
+      - name: Build gem with checksum
+        run: bundle exec rake build:checksum
+
       - name: Release gem
         run: bundle exec rake release
         env:
