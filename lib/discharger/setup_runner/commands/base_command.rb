@@ -35,7 +35,14 @@ module Discharger
         end
 
         def with_spinner(message)
-          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+          if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+            result = yield
+            # Handle error case when spinner is disabled
+            if result.is_a?(Hash) && !result[:success] && result[:raise_error] != false
+              raise result[:error]
+            end
+            return result
+          end
           
           require 'rainbow'
           spinner_chars = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏]
@@ -110,7 +117,22 @@ module Discharger
           require 'open3'
           command_str = args.join(" ")
           
-          result = with_spinner("Executing #{command_str}") do
+          # Create a more readable message for the spinner
+          spinner_message = if command_str.length > 80
+            if args.first.is_a?(Hash)
+              # Skip env hash in display
+              cmd_args = args[1..-1]
+              base_cmd = cmd_args.take(3).join(" ")
+              "Executing #{base_cmd}..."
+            else
+              base_cmd = args.take(3).join(" ")
+              "Executing #{base_cmd}..."
+            end
+          else
+            "Executing #{command_str}"
+          end
+          
+          result = with_spinner(spinner_message) do
             stdout, stderr, status = Open3.capture3(*args)
             
             if status.success?

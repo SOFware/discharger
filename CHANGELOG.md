@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Colorized output for better readability
   - Clear success/failure indicators for each command
   - Progress indicators that work in CI environments
+  - Cleaner output for database operations (no more verbose Rails runner scripts)
+  - Smart truncation of long commands in spinner messages
 
 ## [0.2.10] - 2025-04-11
 
