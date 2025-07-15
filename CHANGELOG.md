@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added an automatic release github action.
 - Updated `system!` in BaseCommand to use Open3 for better output control
 - Added `prism` gem dependency for safe condition evaluation
+- Improved DatabaseCommand to terminate existing database connections before dropping
+  - Uses ActiveRecord connection instead of psql to avoid password prompts
+  - Works with any Rails-supported PostgreSQL setup including Docker
+  - Gracefully handles non-PostgreSQL databases
 
 ## [0.2.10] - 2025-04-11
 
