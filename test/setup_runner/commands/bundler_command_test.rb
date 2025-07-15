@@ -30,11 +30,14 @@ class BundlerCommandTest < ActiveSupport::TestCase
     create_file("Gemfile", "source 'https://rubygems.org'")
     
     commands_run = []
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
       commands_run << command
+      # Don't raise for bundle check failure
+    end
+    @command.define_singleton_method(:system) do |*args|
       # bundle check fails
-      command == "bundle check" ? false : true
+      args.join(" ") == "bundle check" ? false : true
     end
     
     @command.execute
@@ -49,9 +52,11 @@ class BundlerCommandTest < ActiveSupport::TestCase
     create_file("Gemfile", "source 'https://rubygems.org'")
     
     commands_run = []
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
       commands_run << command
+    end
+    @command.define_singleton_method(:system) do |*args|
       true # all commands succeed
     end
     
@@ -70,6 +75,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
     logger = Logger.new(io)
     command = Discharger::SetupRunner::Commands::BundlerCommand.new(@config, @test_dir, logger)
     
+    command.define_singleton_method(:system!) { |*args| }
     command.define_singleton_method(:system) { |*args| true }
     
     command.execute
@@ -83,11 +89,11 @@ class BundlerCommandTest < ActiveSupport::TestCase
   test "execute handles gem install failure" do
     create_file("Gemfile", "source 'https://rubygems.org'")
     
-    @command.define_singleton_method(:system) do |*args|
-      false # all commands fail
+    @command.define_singleton_method(:system!) do |*args|
+      raise "gem install bundler --conservative failed:"
     end
     
-    assert_raises(RuntimeError, "gem install bundler --conservative failed") do
+    assert_raises(RuntimeError) do
       @command.execute
     end
   end
@@ -95,16 +101,18 @@ class BundlerCommandTest < ActiveSupport::TestCase
   test "execute handles bundle install failure" do
     create_file("Gemfile", "source 'https://rubygems.org'")
     
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
       if command == "bundle install"
-        false
-      else
-        command == "bundle check" ? false : true
+        raise "bundle install failed:"
       end
     end
+    @command.define_singleton_method(:system) do |*args|
+      command = args.join(" ")
+      command == "bundle check" ? false : true
+    end
     
-    assert_raises(RuntimeError, "bundle install failed") do
+    assert_raises(RuntimeError) do
       @command.execute
     end
   end

@@ -83,9 +83,8 @@ class CustomCommandTest < ActiveSupport::TestCase
     )
     
     system_called = false
-    command.define_singleton_method(:system) do |*args|
+    command.define_singleton_method(:system!) do |*args|
       system_called = true if args.join(" ") == "echo 'Hello'"
-      true
     end
     
     command.execute
@@ -105,9 +104,8 @@ class CustomCommandTest < ActiveSupport::TestCase
     )
     
     system_called = false
-    command.define_singleton_method(:system) do |*args|
+    command.define_singleton_method(:system!) do |*args|
       system_called = true if args.join(" ") == "echo 'Hello'"
-      true
     end
     
     command.execute
@@ -130,9 +128,8 @@ class CustomCommandTest < ActiveSupport::TestCase
     )
     
     system_called = false
-    command.define_singleton_method(:system) do |*args|
+    command.define_singleton_method(:system!) do |*args|
       system_called = true
-      true
     end
     
     command.execute
@@ -155,9 +152,8 @@ class CustomCommandTest < ActiveSupport::TestCase
     )
     
     system_called = false
-    command.define_singleton_method(:system) do |*args|
+    command.define_singleton_method(:system!) do |*args|
       system_called = true
-      true
     end
     
     command.execute
@@ -182,9 +178,8 @@ class CustomCommandTest < ActiveSupport::TestCase
     )
     
     system_called = false
-    command.define_singleton_method(:system) do |*args|
+    command.define_singleton_method(:system!) do |*args|
       system_called = true
-      true
     end
     
     command.execute
@@ -205,7 +200,7 @@ class CustomCommandTest < ActiveSupport::TestCase
       @config, @test_dir, logger, step_config
     )
     
-    command.define_singleton_method(:system) { |*args| true }
+    command.define_singleton_method(:system!) { |*args| }
     
     command.execute
     

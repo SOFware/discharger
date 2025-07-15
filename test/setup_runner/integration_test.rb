@@ -9,9 +9,8 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     # Create a simple configuration
     config_content = <<~YAML
       app_name: TestApp
-      commands:
-        env:
-          enabled: true
+      steps:
+        - env
       custom_steps:
         - description: "Create test file"
           command: "touch test_output.txt"
@@ -83,9 +82,8 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
   test "yields runner for customization" do
     config_content = <<~YAML
       app_name: TestApp
-      commands:
-        bundler:
-          enabled: true
+      steps:
+        - bundler
     YAML
     
     create_file("setup.yml", config_content)
@@ -93,13 +91,16 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     
     commands_executed = []
     
+    # Create logger for the tracking command
+    logger = Logger.new(StringIO.new)
+    
     Discharger::SetupRunner.run("setup.yml") do |runner|
       # Add a custom command to track execution
       tracking_command = Class.new(Discharger::SetupRunner::Commands::BaseCommand) do
         define_method :execute do
           commands_executed << "tracking_command"
         end
-      end.new({}, Dir.pwd, Logger.new(StringIO.new))
+      end.new({}, Dir.pwd, logger)
       
       runner.add_command(tracking_command)
     end

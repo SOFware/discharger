@@ -34,9 +34,8 @@ class BrewCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:gets) { input.gets }
     
     system_called = false
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system!) do |*args|
       system_called = true if args.join(" ") == "brew bundle"
-      true
     end
     
     output, _ = capture_output do
@@ -55,9 +54,8 @@ class BrewCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:gets) { input.gets }
     
     system_called = false
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system!) do |*args|
       system_called = true if args.join(" ") == "brew bundle"
-      true
     end
     
     capture_output do
@@ -77,7 +75,7 @@ class BrewCommandTest < ActiveSupport::TestCase
     # Mock user input and system call
     input = StringIO.new("Y\n")
     command.define_singleton_method(:gets) { input.gets }
-    command.define_singleton_method(:system) { |*args| true }
+    command.define_singleton_method(:system!) { |*args| }
     
     capture_output do
       command.execute
@@ -95,9 +93,11 @@ class BrewCommandTest < ActiveSupport::TestCase
     # Mock user input and failing system call
     input = StringIO.new("Y\n")
     @command.define_singleton_method(:gets) { input.gets }
-    @command.define_singleton_method(:system) { |*args| false }
+    @command.define_singleton_method(:system!) do |*args|
+      raise "brew bundle failed:"
+    end
     
-    assert_raises(RuntimeError, "brew bundle failed") do
+    assert_raises(RuntimeError) do
       capture_output do
         @command.execute
       end
