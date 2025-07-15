@@ -4,6 +4,7 @@ require_relative "commands/base_command"
 require_relative "commands/asdf_command"
 require_relative "commands/brew_command"
 require_relative "commands/bundler_command"
+require_relative "commands/config_command"
 require_relative "commands/env_command"
 
 module Discharger
@@ -41,6 +42,7 @@ module Discharger
       register "asdf", Commands::AsdfCommand
       register "brew", Commands::BrewCommand
       register "bundler", Commands::BundlerCommand
+      register "config", Commands::ConfigCommand
       register "env", Commands::EnvCommand
     end
   end
