@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "discharger"
 require_relative "setup_runner/version"
 require_relative "setup_runner/configuration"
 require_relative "setup_runner/command_registry"
