@@ -61,6 +61,17 @@ module SetupRunnerTestHelper
     assert file_content.include?(content), 
            message || "Expected file #{path} to contain: #{content}\nActual content: #{file_content}"
   end
+  
+  def refute_file_exists(path, message = nil)
+    refute File.exist?(path), message || "Expected file #{path} not to exist"
+  end
+  
+  def refute_file_contains(path, content, message = nil)
+    return unless File.exist?(path)
+    file_content = File.read(path)
+    refute file_content.include?(content), 
+           message || "Expected file #{path} not to contain: #{content}\nActual content: #{file_content}"
+  end
 
   def stub_system_call(command, success: true, output: "")
     # This is a simple stub - in real tests we'd use a mocking library
