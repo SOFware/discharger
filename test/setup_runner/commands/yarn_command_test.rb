@@ -61,10 +61,6 @@ class YarnCommandTest < ActiveSupport::TestCase
     commands_run = []
 
     @command.define_singleton_method(:system_quiet) do |cmd|
-      case cmd
-      when "which corepack"
-      when "yarn check --check-files > /dev/null 2>&1"
-      end
       true
     end
 

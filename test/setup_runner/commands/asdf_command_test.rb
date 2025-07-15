@@ -163,10 +163,6 @@ class AsdfCommandTest < ActiveSupport::TestCase
     versions_installed = []
 
     @command.define_singleton_method(:system_quiet) do |cmd|
-      case cmd
-      when "which asdf"
-      when /asdf plugin list \| grep/
-      end
       true
     end
 

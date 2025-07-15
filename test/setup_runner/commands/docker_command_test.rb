@@ -238,10 +238,6 @@ class DockerCommandTest < ActiveSupport::TestCase
     commands_run = []
 
     @command.define_singleton_method(:system_quiet) do |cmd|
-      case cmd
-      when "docker info > /dev/null 2>&1"
-      when /docker ps.*db-test/
-      end
       true
     end
 
