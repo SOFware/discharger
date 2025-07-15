@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - DockerCommand: Manages Docker containers for services
   - GitCommand: Configures git settings and hooks
   - YarnCommand: Installs JavaScript dependencies (Yarn/NPM)
+- Added post-install message to guide users to run the generator
 
 ### Changed
 
