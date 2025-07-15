@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - `rails generate discharger:install` now creates `bin/setup` script
   - Creates `config/setup.yml` with example configuration
   - Customizable setup script location via `--setup_path` option
+- Added new built-in setup commands:
+  - AsdfCommand: Manages tool versions using asdf
+  - ConfigCommand: Copies configuration files from examples
+  - DatabaseCommand: Sets up Rails databases (development and test)
+  - DockerCommand: Manages Docker containers for services
+  - GitCommand: Configures git settings and hooks
+  - YarnCommand: Installs JavaScript dependencies (Yarn/NPM)
 
 ### Changed
 
