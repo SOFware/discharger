@@ -7,9 +7,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.11] - Unreleased
 
+### Added
+
+- Added SetupRunner module for automated development environment setup
+  - Configuration-driven setup process via YAML files
+  - Built-in commands for common tasks (Brew, Bundler, environment files)
+  - Custom command support with conditional execution
+  - Safe condition evaluation using Prism parser (no eval)
+  - Extensible command registry for adding new setup commands
+- Updated Rails generator to create setup script and configuration
+  - `rails generate discharger:install` now creates `bin/setup` script
+  - Creates `config/setup.yml` with example configuration
+  - Customizable setup script location via `--setup_path` option
+
 ### Changed
 
 - Added an automatic release github action.
+- Updated `system!` in BaseCommand to use Open3 for better output control
+- Added `prism` gem dependency for safe condition evaluation
 
 ## [0.2.10] - 2025-04-11
 
