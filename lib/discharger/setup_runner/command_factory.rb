@@ -19,7 +19,7 @@ module Discharger
 
         command_class.new(config, app_root, logger)
       rescue => e
-        logger.warn "Failed to create command #{name}: #{e.message}"
+        logger&.warn "Failed to create command #{name}: #{e.message}"
         nil
       end
 

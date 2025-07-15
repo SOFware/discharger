@@ -16,6 +16,11 @@ class CommandRegistryTest < ActiveSupport::TestCase
   end
 
   setup do
+    # Save current commands
+    @original_commands = {}
+    Discharger::SetupRunner::CommandRegistry.names.each do |name|
+      @original_commands[name] = Discharger::SetupRunner::CommandRegistry.get(name)
+    end
     # Clear registry before each test
     Discharger::SetupRunner::CommandRegistry.clear
   end
@@ -23,6 +28,10 @@ class CommandRegistryTest < ActiveSupport::TestCase
   teardown do
     # Clear registry after each test
     Discharger::SetupRunner::CommandRegistry.clear
+    # Restore original commands
+    @original_commands.each do |name, command_class|
+      Discharger::SetupRunner::CommandRegistry.register(name, command_class)
+    end
   end
 
   test "registers a new command" do

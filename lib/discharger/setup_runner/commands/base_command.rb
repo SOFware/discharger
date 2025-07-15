@@ -21,13 +21,16 @@ module Discharger
         end
 
         def description
-          self.class.name.demodulize.underscore.humanize
+          class_name = self.class.name || "AnonymousCommand"
+          class_name.demodulize.underscore.humanize
         end
 
         protected
 
         def log(message)
-          logger.info "[#{self.class.name.demodulize}] #{message}"
+          return unless logger
+          class_name = self.class.name || "AnonymousCommand"
+          logger.info "[#{class_name.demodulize}] #{message}"
         end
 
         def system!(*args)
@@ -39,10 +42,10 @@ module Discharger
           if status.success?
             log "#{args.join(" ")} succeeded"
             # Log output if there is any (for debugging)
-            logger.debug("Output: #{stdout}") if stdout && !stdout.empty?
+            logger&.debug("Output: #{stdout}") if stdout && !stdout.empty?
           elsif args.first.to_s.include?("docker")
             log "#{args.join(" ")} failed (Docker command)"
-            logger.debug("Error: #{stderr}") if stderr && !stderr.empty?
+            logger&.debug("Error: #{stderr}") if stderr && !stderr.empty?
           else
             raise "#{args.join(" ")} failed: #{stderr}"
           end

@@ -18,9 +18,9 @@ module Discharger
         @configuration ||= Configuration.new
       end
 
-      def run(config_path = nil)
+      def run(config_path = nil, logger = nil)
         config = config_path ? Configuration.from_file(config_path) : configuration
-        runner = Runner.new(config)
+        runner = Runner.new(config, Dir.pwd, logger)
         yield runner if block_given?
         runner.run
       end
