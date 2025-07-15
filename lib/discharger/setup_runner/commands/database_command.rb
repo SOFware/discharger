@@ -89,7 +89,8 @@ module Discharger
               end
             rescue => e
               # If we can't connect or terminate, that's okay - the database might not exist yet
-              puts "Note: Could not terminate existing connections: \#{e.message}"
+              # Log error silently in test environment
+              puts "Note: Could not terminate existing connections: \#{e.message}" unless ENV['QUIET_SETUP']
             end
           RUBY
           

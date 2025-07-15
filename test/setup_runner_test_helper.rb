@@ -9,6 +9,8 @@ module SetupRunnerTestHelper
     FileUtils.cd(@test_dir)
     # Disable spinners and colored output in tests
     ENV['NO_SPINNER'] = '1'
+    # Suppress setup runner output by default in tests
+    ENV['QUIET_SETUP'] = '1'
   end
 
   def teardown
@@ -85,5 +87,14 @@ module SetupRunnerTestHelper
         super(*args)
       end
     end
+  end
+  
+  def with_output_enabled(&block)
+    # Temporarily enable output for tests that need to capture it
+    original_quiet = ENV['QUIET_SETUP']
+    ENV.delete('QUIET_SETUP')
+    yield
+  ensure
+    ENV['QUIET_SETUP'] = original_quiet if original_quiet
   end
 end

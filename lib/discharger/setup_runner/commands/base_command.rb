@@ -35,7 +35,7 @@ module Discharger
         end
 
         def with_spinner(message)
-          if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+          if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty? || ENV['QUIET_SETUP']
             result = yield
             # Handle error case when spinner is disabled
             if result.is_a?(Hash) && !result[:success] && result[:raise_error] != false
@@ -97,7 +97,7 @@ module Discharger
         end
 
         def simple_action(message)
-          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty? || ENV['QUIET_SETUP']
           
           require 'rainbow'
           print Rainbow("  → #{message}...").cyan
@@ -164,14 +164,18 @@ module Discharger
         end
 
         def ask_to_install(description)
-          puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
+          unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+            puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
+          end
           if gets.chomp == "Y"
             yield
           end
         end
 
         def proceed_with(task)
-          puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
+          unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+            puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
+          end
           if gets.chomp == "Y"
             yield
           end

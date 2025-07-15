@@ -61,8 +61,8 @@ class EnvCommandTest < ActiveSupport::TestCase
     create_file(".env.example", "TEST_VAR=example")
     create_file(".env", "TEST_VAR=production")
     
-    stdout, _stderr = capture_output do
-      @command.execute
+    stdout, _stderr = with_output_enabled do
+      capture_output { @command.execute }
     end
     
     assert_match(/\.env file already exists\. Skipping\./, stdout)

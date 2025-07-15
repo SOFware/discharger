@@ -9,14 +9,18 @@ module Discharger
       class EnvCommand < BaseCommand
         def execute
           if File.exist?(".env")
-            require 'rainbow'
-            puts Rainbow("  → .env file already exists. Skipping.").yellow
+            unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+              require 'rainbow'
+              puts Rainbow("  → .env file already exists. Skipping.").yellow
+            end
             return
           end
           
           unless File.exist?(".env.example")
-            require 'rainbow'
-            puts Rainbow("  → WARNING: .env.example not found. Skipping .env creation").yellow
+            unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+              require 'rainbow'
+              puts Rainbow("  → WARNING: .env.example not found. Skipping .env creation").yellow
+            end
             return
           end
 

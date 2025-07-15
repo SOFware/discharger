@@ -38,8 +38,8 @@ class BrewCommandTest < ActiveSupport::TestCase
       system_called = true if args.join(" ") == "brew bundle"
     end
     
-    output, _ = capture_output do
-      @command.execute
+    output, _ = with_output_enabled do
+      capture_output { @command.execute }
     end
     
     assert system_called

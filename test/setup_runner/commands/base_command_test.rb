@@ -105,8 +105,10 @@ class BaseCommandTest < ActiveSupport::TestCase
     command.define_singleton_method(:gets) { input.gets }
     
     yielded = false
-    output, _ = capture_output do
-      command.send(:ask_to_install, "test tool") { yielded = true }
+    output, _ = with_output_enabled do
+      capture_output do
+        command.send(:ask_to_install, "test tool") { yielded = true }
+      end
     end
     
     assert yielded
@@ -136,8 +138,10 @@ class BaseCommandTest < ActiveSupport::TestCase
     command.define_singleton_method(:gets) { input.gets }
     
     yielded = false
-    output, _ = capture_output do
-      command.send(:proceed_with, "test task") { yielded = true }
+    output, _ = with_output_enabled do
+      capture_output do
+        command.send(:proceed_with, "test task") { yielded = true }
+      end
     end
     
     assert yielded
