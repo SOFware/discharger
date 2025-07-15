@@ -6,6 +6,7 @@ require_relative "commands/brew_command"
 require_relative "commands/bundler_command"
 require_relative "commands/config_command"
 require_relative "commands/database_command"
+require_relative "commands/docker_command"
 require_relative "commands/env_command"
 
 module Discharger
@@ -45,6 +46,7 @@ module Discharger
       register "bundler", Commands::BundlerCommand
       register "config", Commands::ConfigCommand
       register "database", Commands::DatabaseCommand
+      register "docker", Commands::DockerCommand
       register "env", Commands::EnvCommand
     end
   end
