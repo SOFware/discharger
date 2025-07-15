@@ -19,9 +19,10 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     create_file("setup.yml", config_content)
     create_file(".env.example", "TEST_VAR=example")
     
-    # Run the setup
-    output = capture_output do
-      Discharger::SetupRunner.run("setup.yml")
+    # Run the setup with silent logger
+    logger = Logger.new(StringIO.new)
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", logger)
     end
     
     # Verify env command created .env file
@@ -68,8 +69,9 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     
     create_file("setup.yml", config_content)
     
-    # Run setup
-    Discharger::SetupRunner.run("setup.yml")
+    # Run setup with silent logger
+    logger = Logger.new(StringIO.new)
+    Discharger::SetupRunner.run("setup.yml", logger)
     
     # Verify custom command executed
     assert_file_exists("custom_command_output.txt")
@@ -94,7 +96,7 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     # Create logger for the tracking command
     logger = Logger.new(StringIO.new)
     
-    Discharger::SetupRunner.run("setup.yml") do |runner|
+    Discharger::SetupRunner.run("setup.yml", logger) do |runner|
       # Add a custom command to track execution
       tracking_command = Class.new(Discharger::SetupRunner::Commands::BaseCommand) do
         define_method :execute do

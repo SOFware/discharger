@@ -14,7 +14,7 @@ class EnvCommandTest < ActiveSupport::TestCase
   end
 
   test "description returns correct text" do
-    assert_equal "Setup environment variables", @command.description
+    assert_equal "Setup environment file", @command.description
   end
 
   test "can_execute? returns true when .env.example exists" do
@@ -58,7 +58,8 @@ class EnvCommandTest < ActiveSupport::TestCase
     command.execute
     
     log_output = io.string
-    assert_match /\[EnvCommand\] Creating .env from .env.example/, log_output
+    assert_match(/\[EnvCommand\] Setting up .env file/, log_output)
+    assert_match(/\[EnvCommand\] .env file created from .env.example/, log_output)
   end
 
   test "execute logs when .env already exists" do
@@ -72,6 +73,7 @@ class EnvCommandTest < ActiveSupport::TestCase
     command.execute
     
     log_output = io.string
-    assert_match /\[EnvCommand\] .env already exists, skipping/, log_output
+    assert_match(/\[EnvCommand\] Setting up .env file/, log_output)
+    assert_match(/\[EnvCommand\] .env file already exists. Doing nothing./, log_output)
   end
 end

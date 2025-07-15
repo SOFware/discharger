@@ -60,7 +60,7 @@ class BaseCommandTest < ActiveSupport::TestCase
     
     command.send(:log, "Test message")
     
-    assert_match /\[TestCommand\] Test message/, io.string
+    assert_match(/\[TestCommand\] Test message/, io.string)
   end
 
   test "system! executes command and logs success" do
@@ -71,8 +71,8 @@ class BaseCommandTest < ActiveSupport::TestCase
     command.send(:system!, "echo", "hello")
     
     log_output = io.string
-    assert_match /Executing echo hello/, log_output
-    assert_match /echo hello succeeded/, log_output
+    assert_match(/Executing echo hello/, log_output)
+    assert_match(/echo hello succeeded/, log_output)
   end
 
   test "system! raises error on command failure" do
@@ -81,7 +81,7 @@ class BaseCommandTest < ActiveSupport::TestCase
     error = assert_raises(RuntimeError) do
       command.execute
     end
-    assert_match /false failed/, error.message
+    assert_match(/false failed/, error.message)
   end
 
   test "system! logs but doesn't raise for docker command failures" do
@@ -94,7 +94,7 @@ class BaseCommandTest < ActiveSupport::TestCase
     command.send(:system!, "docker", "run", "--fake-flag-that-doesnt-exist")
     
     log_output = io.string
-    assert_match /docker run --fake-flag-that-doesnt-exist failed \(Docker command\)/, log_output
+    assert_match(/docker run --fake-flag-that-doesnt-exist failed \(Docker command\)/, log_output)
   end
 
   test "ask_to_install prompts user and yields on Y" do
@@ -110,7 +110,7 @@ class BaseCommandTest < ActiveSupport::TestCase
     end
     
     assert yielded
-    assert_match /You do not currently use test tool/, output
+    assert_match(/You do not currently use test tool/, output)
   end
 
   test "ask_to_install doesn't yield on non-Y input" do
@@ -141,7 +141,7 @@ class BaseCommandTest < ActiveSupport::TestCase
     end
     
     assert yielded
-    assert_match /Proceed with test task\?/, output
+    assert_match(/Proceed with test task\?/, output)
   end
 
   test "subclass can override can_execute?" do

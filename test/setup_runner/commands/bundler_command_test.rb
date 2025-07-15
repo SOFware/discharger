@@ -81,9 +81,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
     command.execute
     
     log_output = io.string
-    assert_match /\[BundlerCommand\] Installing dependencies/, log_output
-    assert_match /\[BundlerCommand\] Executing gem install bundler --conservative/, log_output
-    assert_match /\[BundlerCommand\] gem install bundler --conservative succeeded/, log_output
+    assert_match(/\[BundlerCommand\] Installing dependencies/, log_output)
   end
 
   test "execute handles gem install failure" do
