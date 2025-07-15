@@ -27,28 +27,110 @@ module Discharger
 
         protected
 
-        def log(message)
+        def log(message, emoji: nil)
           return unless logger
           class_name = self.class.name || "AnonymousCommand"
-          logger.info "[#{class_name.demodulize}] #{message}"
+          prefix = emoji ? "#{emoji} " : ""
+          logger.info "#{prefix}[#{class_name.demodulize}] #{message}"
+        end
+
+        def with_spinner(message)
+          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+          
+          require 'rainbow'
+          spinner_chars = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏]
+          spinner_thread = nil
+          stop_spinner = false
+          
+          begin
+            # Print initial message
+            print Rainbow("◯ #{message}").cyan
+            $stdout.flush
+            
+            # Start spinner in background thread
+            spinner_thread = Thread.new do
+              i = 0
+              until stop_spinner
+                print "\r#{Rainbow(spinner_chars[i % spinner_chars.length]).cyan} #{Rainbow(message).cyan}"
+                $stdout.flush
+                sleep 0.1
+                i += 1
+              end
+            end
+            
+            # Execute the block
+            result = yield
+            
+            # Stop spinner
+            stop_spinner = true
+            spinner_thread&.join(0.1)
+            
+            # Clear line and print result
+            if result.is_a?(Hash)
+              if result[:success]
+                puts "\r#{Rainbow(result[:message] || '✓').green} #{message}"
+              else
+                puts "\r#{Rainbow(result[:message] || '✗').red} #{message}"
+                raise result[:error] if result[:error] && result[:raise_error] != false
+              end
+            else
+              puts "\r#{Rainbow('✓').green} #{message}"
+            end
+            
+            result
+          rescue
+            stop_spinner = true
+            spinner_thread&.join(0.1)
+            puts "\r#{Rainbow('✗').red} #{message}"
+            raise
+          ensure
+            stop_spinner = true
+            spinner_thread&.kill if spinner_thread&.alive?
+          end
+        end
+
+        def simple_action(message)
+          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty?
+          
+          require 'rainbow'
+          print Rainbow("  → #{message}...").cyan
+          $stdout.flush
+          
+          begin
+            result = yield
+            puts Rainbow(" ✓").green
+            result
+          rescue
+            puts Rainbow(" ✗").red
+            raise
+          end
         end
 
         def system!(*args)
           require 'open3'
-          log "Executing #{args.join(" ")}"
-
-          stdout, stderr, status = Open3.capture3(*args)
+          command_str = args.join(" ")
           
-          if status.success?
-            log "#{args.join(" ")} succeeded"
-            # Log output if there is any (for debugging)
-            logger&.debug("Output: #{stdout}") if stdout && !stdout.empty?
-          elsif args.first.to_s.include?("docker")
-            log "#{args.join(" ")} failed (Docker command)"
-            logger&.debug("Error: #{stderr}") if stderr && !stderr.empty?
-          else
-            raise "#{args.join(" ")} failed: #{stderr}"
+          result = with_spinner("Executing #{command_str}") do
+            stdout, stderr, status = Open3.capture3(*args)
+            
+            if status.success?
+              # Log output if there is any (for debugging)
+              logger&.debug("Output: #{stdout}") if stdout && !stdout.empty?
+              { success: true, message: "✓" }
+            elsif args.first.to_s.include?("docker")
+              logger&.debug("Error: #{stderr}") if stderr && !stderr.empty?
+              { success: false, message: "✗ (Docker command failed)", raise_error: false }
+            else
+              { success: false, message: "✗", error: "#{command_str} failed: #{stderr}" }
+            end
           end
+          
+          # Handle the case when spinner is disabled
+          if result.is_a?(Hash) && !result[:success] && result[:raise_error] != false
+            raise result[:error]
+          end
+          
+          result
         end
 
         def system_quiet(*args)

@@ -19,15 +19,17 @@ module Discharger
       end
 
       def run
-        log "Starting setup for #{config.app_name}"
+        require 'rainbow'
+        puts Rainbow("\n🚀 Starting setup for #{config.app_name}").bright.blue
+        puts Rainbow("=" * 50).blue
 
         FileUtils.chdir app_root do
           execute_commands
         end
 
-        log "Setup completed successfully"
+        puts Rainbow("\n✅ Setup completed successfully!").bright.green
       rescue => e
-        log "Setup failed: #{e.message}"
+        puts Rainbow("\n❌ Setup failed: #{e.message}").bright.red
         raise Error, e.message
       end
 
@@ -76,14 +78,16 @@ module Discharger
 
       def execute_command(command)
         unless command.can_execute?
-          log "Skipping #{command.description} (prerequisites not met)"
+          require 'rainbow'
+          puts Rainbow("⏭️  Skipping #{command.description} (prerequisites not met)").yellow
           return
         end
 
-        log "Executing: #{command.description}"
+        puts Rainbow("\n▶️  #{command.description}").bright
         command.execute
       rescue => e
-        log "Command #{command.description} failed: #{e.message}"
+        require 'rainbow'
+        puts Rainbow("❌ Command #{command.description} failed: #{e.message}").red
         raise e
       end
 

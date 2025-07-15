@@ -8,13 +8,21 @@ module Discharger
     module Commands
       class EnvCommand < BaseCommand
         def execute
-          log "Setting up .env file"
+          if File.exist?(".env")
+            require 'rainbow'
+            puts Rainbow("  → .env file already exists. Skipping.").yellow
+            return
+          end
+          
+          unless File.exist?(".env.example")
+            require 'rainbow'
+            puts Rainbow("  → WARNING: .env.example not found. Skipping .env creation").yellow
+            return
+          end
 
-          return log(".env file already exists. Doing nothing.") if File.exist?(".env")
-          return log("WARNING: .env.example not found. Skipping .env creation") unless File.exist?(".env.example")
-
-          FileUtils.cp(".env.example", ".env")
-          log ".env file created from .env.example"
+          simple_action("Creating .env from .env.example") do
+            FileUtils.cp(".env.example", ".env")
+          end
         end
 
         def can_execute?

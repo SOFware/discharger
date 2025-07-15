@@ -93,22 +93,28 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     assert_equal({ "SEED_DEV_ENV" => "true" }, seed_command[:env])
   end
 
-  test "execute logs all activities" do
-    io = StringIO.new
-    logger = Logger.new(io)
-    command = Discharger::SetupRunner::Commands::DatabaseCommand.new(@config, @test_dir, logger)
+  test "execute runs all expected commands" do
+    commands_run = []
     
-    command.define_singleton_method(:system!) { |*args| }
+    @command.define_singleton_method(:system!) do |*args|
+      if args.first.is_a?(Hash)
+        env = args.shift
+        command = args.join(" ")
+        commands_run << { env: env, command: command }
+      else
+        command = args.join(" ")
+        commands_run << { env: {}, command: command }
+      end
+    end
     
-    command.execute
+    @command.execute
     
-    log_output = io.string
-    assert_match(/Setting up database/, log_output)
-    assert_match(/Dropping & recreating the development database/, log_output)
-    assert_match(/Loading the database schema/, log_output)
-    assert_match(/Seeding the database/, log_output)
-    assert_match(/Dropping & recreating the test database/, log_output)
-    assert_match(/Removing old logs and tempfiles/, log_output)
+    # Check that all expected commands were run
+    assert commands_run.any? { |cmd| cmd[:command].include?("pg_terminate_backend") }
+    assert commands_run.any? { |cmd| cmd[:command].include?("db:drop db:create") }
+    assert commands_run.any? { |cmd| cmd[:command].include?("db:schema:load") }
+    assert commands_run.any? { |cmd| cmd[:command].include?("db:seed") }
+    assert commands_run.any? { |cmd| cmd[:command].include?("log:clear tmp:clear") }
   end
 
   test "execute handles database command failures" do

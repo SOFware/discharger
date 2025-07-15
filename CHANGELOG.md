@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Uses ActiveRecord connection instead of psql to avoid password prompts
   - Works with any Rails-supported PostgreSQL setup including Docker
   - Gracefully handles non-PostgreSQL databases
+- Enhanced SetupRunner with visual feedback
+  - Added animated spinners for long-running commands
+  - Colorized output for better readability
+  - Clear success/failure indicators for each command
+  - Progress indicators that work in CI environments
 
 ## [0.2.10] - 2025-04-11
 

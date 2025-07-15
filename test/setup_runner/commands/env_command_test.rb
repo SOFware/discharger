@@ -48,32 +48,23 @@ class EnvCommandTest < ActiveSupport::TestCase
     refute File.read(".env").include?("example")
   end
 
-  test "execute logs activity" do
+  test "execute creates .env file successfully" do
     create_file(".env.example", "TEST_VAR=example")
     
-    io = StringIO.new
-    logger = Logger.new(io)
-    command = Discharger::SetupRunner::Commands::EnvCommand.new(@config, @test_dir, logger)
+    @command.execute
     
-    command.execute
-    
-    log_output = io.string
-    assert_match(/\[EnvCommand\] Setting up .env file/, log_output)
-    assert_match(/\[EnvCommand\] .env file created from .env.example/, log_output)
+    assert_file_exists(".env")
+    assert_file_contains(".env", "TEST_VAR=example")
   end
 
-  test "execute logs when .env already exists" do
+  test "execute outputs message when .env already exists" do
     create_file(".env.example", "TEST_VAR=example")
     create_file(".env", "TEST_VAR=production")
     
-    io = StringIO.new
-    logger = Logger.new(io)
-    command = Discharger::SetupRunner::Commands::EnvCommand.new(@config, @test_dir, logger)
+    stdout, _stderr = capture_output do
+      @command.execute
+    end
     
-    command.execute
-    
-    log_output = io.string
-    assert_match(/\[EnvCommand\] Setting up .env file/, log_output)
-    assert_match(/\[EnvCommand\] .env file already exists. Doing nothing./, log_output)
+    assert_match(/\.env file already exists\. Skipping\./, stdout)
   end
 end

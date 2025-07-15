@@ -7,6 +7,8 @@ module SetupRunnerTestHelper
     @original_pwd = Dir.pwd
     @test_dir = Dir.mktmpdir("discharger_test")
     FileUtils.cd(@test_dir)
+    # Disable spinners and colored output in tests
+    ENV['NO_SPINNER'] = '1'
   end
 
   def teardown
