@@ -35,7 +35,9 @@ class BundlerCommandTest < ActiveSupport::TestCase
       commands_run << command
       # Don't raise for bundle check failure
     end
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system_quiet) do |*args|
+      command = args.join(" ")
+      commands_run << command
       # bundle check fails
       args.join(" ") == "bundle check" ? false : true
     end
@@ -56,7 +58,9 @@ class BundlerCommandTest < ActiveSupport::TestCase
       command = args.join(" ")
       commands_run << command
     end
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system_quiet) do |*args|
+      command = args.join(" ")
+      commands_run << command
       true # all commands succeed
     end
     
@@ -64,6 +68,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
     
     assert_equal 2, commands_run.size
     assert_equal "gem install bundler --conservative", commands_run[0]
+    # bundle check is called via system, not system!, so it's the last one
     assert_equal "bundle check", commands_run[1]
     # bundle install should not be called
   end
@@ -76,7 +81,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
     command = Discharger::SetupRunner::Commands::BundlerCommand.new(@config, @test_dir, logger)
     
     command.define_singleton_method(:system!) { |*args| }
-    command.define_singleton_method(:system) { |*args| true }
+    command.define_singleton_method(:system_quiet) { |*args| true }
     
     command.execute
     
@@ -105,7 +110,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
         raise "bundle install failed:"
       end
     end
-    @command.define_singleton_method(:system) do |*args|
+    @command.define_singleton_method(:system_quiet) do |*args|
       command = args.join(" ")
       command == "bundle check" ? false : true
     end

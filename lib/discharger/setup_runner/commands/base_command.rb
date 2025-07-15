@@ -51,6 +51,14 @@ module Discharger
           end
         end
 
+        def system_quiet(*args)
+          require 'open3'
+          stdout, _stderr, status = Open3.capture3(*args)
+          logger&.debug("Quietly executed #{args.join(" ")} - success: #{status.success?}")
+          logger&.debug("Output: #{stdout}") if stdout && !stdout.empty? && logger
+          status.success?
+        end
+
         def ask_to_install(description)
           puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
           if gets.chomp == "Y"

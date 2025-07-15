@@ -9,7 +9,7 @@ module Discharger
         def execute
           log "Installing dependencies"
           system! "gem install bundler --conservative"
-          system("bundle check") || system!("bundle install")
+          system_quiet("bundle check") || system!("bundle install")
         end
 
         def can_execute?
