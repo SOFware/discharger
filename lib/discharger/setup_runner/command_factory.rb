@@ -42,9 +42,10 @@ module Discharger
 
         # Create custom commands
         if config.respond_to?(:custom_steps) && config.custom_steps.any?
+          require_relative "commands/custom_command"
           config.custom_steps.each do |step_config|
-            # Custom commands will be handled when we add CustomCommand
-            logger.info "Custom command support will be added later: #{step_config.inspect}"
+            command = Commands::CustomCommand.new(config, app_root, logger, step_config)
+            commands << command
           end
         end
 
