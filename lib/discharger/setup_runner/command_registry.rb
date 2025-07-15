@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "commands/base_command"
+require_relative "commands/brew_command"
+require_relative "commands/bundler_command"
+require_relative "commands/env_command"
+
 module Discharger
   module SetupRunner
     class CommandRegistry
@@ -30,6 +35,11 @@ module Discharger
           @commands ||= {}
         end
       end
+
+      # Register built-in commands
+      register "brew", Commands::BrewCommand
+      register "bundler", Commands::BundlerCommand
+      register "env", Commands::EnvCommand
     end
   end
 end
