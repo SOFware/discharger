@@ -8,6 +8,7 @@ require_relative "commands/config_command"
 require_relative "commands/database_command"
 require_relative "commands/docker_command"
 require_relative "commands/env_command"
+require_relative "commands/git_command"
 
 module Discharger
   module SetupRunner
@@ -48,6 +49,7 @@ module Discharger
       register "database", Commands::DatabaseCommand
       register "docker", Commands::DockerCommand
       register "env", Commands::EnvCommand
+      register "git", Commands::GitCommand
     end
   end
 end
