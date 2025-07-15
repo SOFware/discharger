@@ -18,6 +18,7 @@ Gem::Specification.new do |spec|
   end
 
   spec.add_dependency "open3"
+  spec.add_dependency "prism", ">= 0.19.0"
   spec.add_dependency "rails", ">= 7.2.1"
   spec.add_dependency "rainbow"
   spec.add_dependency "reissue"
