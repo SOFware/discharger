@@ -31,14 +31,20 @@ module Discharger
         end
 
         def system!(*args)
+          require 'open3'
           log "Executing #{args.join(" ")}"
 
-          if system(*args)
+          stdout, stderr, status = Open3.capture3(*args)
+          
+          if status.success?
             log "#{args.join(" ")} succeeded"
+            # Log output if there is any (for debugging)
+            logger.debug("Output: #{stdout}") if stdout && !stdout.empty?
           elsif args.first.to_s.include?("docker")
             log "#{args.join(" ")} failed (Docker command)"
+            logger.debug("Error: #{stderr}") if stderr && !stderr.empty?
           else
-            raise "#{args.join(" ")} failed"
+            raise "#{args.join(" ")} failed: #{stderr}"
           end
         end
 

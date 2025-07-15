@@ -78,9 +78,10 @@ class BaseCommandTest < ActiveSupport::TestCase
   test "system! raises error on command failure" do
     command = FailingTestCommand.new(@config, @test_dir, @logger)
     
-    assert_raises(RuntimeError, "false failed") do
+    error = assert_raises(RuntimeError) do
       command.execute
     end
+    assert_match /false failed/, error.message
   end
 
   test "system! logs but doesn't raise for docker command failures" do
@@ -88,15 +89,12 @@ class BaseCommandTest < ActiveSupport::TestCase
     logger = Logger.new(io)
     command = TestCommand.new(@config, @test_dir, logger)
     
-    # Stub system to return false for docker command
-    command.define_singleton_method(:system) do |*args|
-      false
-    end
+    # Docker commands that fail should not raise
+    # Using a docker command that will fail
+    command.send(:system!, "docker", "run", "--fake-flag-that-doesnt-exist")
     
-    # Should not raise
-    command.send(:system!, "docker", "run", "test")
-    
-    assert_match /docker run test failed \(Docker command\)/, io.string
+    log_output = io.string
+    assert_match /docker run --fake-flag-that-doesnt-exist failed \(Docker command\)/, log_output
   end
 
   test "ask_to_install prompts user and yields on Y" do
