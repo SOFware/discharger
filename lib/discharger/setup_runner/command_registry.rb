@@ -9,6 +9,7 @@ require_relative "commands/database_command"
 require_relative "commands/docker_command"
 require_relative "commands/env_command"
 require_relative "commands/git_command"
+require_relative "commands/yarn_command"
 
 module Discharger
   module SetupRunner
@@ -50,6 +51,7 @@ module Discharger
       register "docker", Commands::DockerCommand
       register "env", Commands::EnvCommand
       register "git", Commands::GitCommand
+      register "yarn", Commands::YarnCommand
     end
   end
 end
