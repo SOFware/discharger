@@ -1,21 +1,21 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require 'fileutils'
-require_relative 'bin_utils'
+require "fileutils"
+require_relative "bin_utils"
 
 DB_PORT = 5434
-DB_NAME = 'db-qualify'
-DB_VERSION = '14'
+DB_NAME = "db-qualify"
+DB_VERSION = "14"
 REDIS_PORT = 6379
-REDIS_NAME = 'redis-qualify'
-REDIS_VERSION = 'latest'
-APPLICATION_NAME = 'Qualify'
+REDIS_NAME = "redis-qualify"
+REDIS_VERSION = "latest"
+APPLICATION_NAME = "Qualify"
 
 ARGV.each do |arg|
   case arg
   when "--legacy"
-    ENV['LEGACY_CURRENCY'] = "true"
+    ENV["LEGACY_CURRENCY"] = "true"
   when "--help"
     puts "Usage: bin/setup [--legacy]"
     puts "  --legacy: Seed legacy currency data from TrainingProfiles and Legacy::Requirements"
@@ -25,7 +25,7 @@ end
 
 def arm64_config
   # M1 specific config
-  arm64 = `uname -m`.chomp == 'arm64'
+  arm64 = `uname -m`.chomp == "arm64"
   return unless arm64
 
   log "\n== Do ARM64 Stuff"
@@ -33,14 +33,14 @@ end
 
 def ask_to_install(description)
   puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
-  if gets.chomp == 'Y'
+  if gets.chomp == "Y"
     yield
   end
 end
 
 def proceed_with(task)
   puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
-  if gets.chomp == 'Y'
+  if gets.chomp == "Y"
     yield
   end
 end
@@ -49,21 +49,21 @@ def asdf_setup
   # Ensure all dependencies are installed via asdf
   log "\n== Install tool-versions dependencies via ASDF"
 
-  tools_versions_file_path = File.join(APP_ROOT, '.tool-versions')
+  tools_versions_file_path = File.join(APP_ROOT, ".tool-versions")
   installables = []
   dependencies = File.read(tools_versions_file_path).split("\n")
 
-  if system('which asdf')
-    unless system('asdf plugin list | grep nodejs')
-      ask_to_install 'asdf to manage Node JS' do
-        installables.concat dependencies.select{|item| item.match?(/node/) }
-        system! 'asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git'
+  if system("which asdf")
+    unless system("asdf plugin list | grep nodejs")
+      ask_to_install "asdf to manage Node JS" do
+        installables.concat dependencies.select { |item| item.match?(/node/) }
+        system! "asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git"
       end
     end
-    unless system('asdf plugin list | grep ruby')
-      ask_to_install 'asdf to manage Ruby' do
-        installables.concat dependencies.select{|item| item.match?(/ruby/) }
-        system! 'asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git'
+    unless system("asdf plugin list | grep ruby")
+      ask_to_install "asdf to manage Ruby" do
+        installables.concat dependencies.select { |item| item.match?(/ruby/) }
+        system! "asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git"
       end
     end
 
@@ -80,92 +80,88 @@ end
 
 def brew_dependencies
   # Ensure all dependencies are installed via Homebrew
-  proceed_with 'brew bundle' do
+  proceed_with "brew bundle" do
     log "\n== Ensure brew dependencies"
-    system! 'brew bundle'
+    system! "brew bundle"
   end
 end
 
 def bundler_config
   log "\n== Installing dependencies =="
-  system! 'gem install bundler --conservative'
-  system('bundle check') || system!('bundle install')
+  system! "gem install bundler --conservative"
+  system("bundle check") || system!("bundle install")
 end
 
 def configuration_config
   log "\n== Ensuring database.yml is present"
-  unless File.file?('config/database.yml')
-    FileUtils.cp 'config/database.yml.example',
-      'config/database.yml'
+  unless File.file?("config/database.yml")
+    FileUtils.cp "config/database.yml.example",
+      "config/database.yml"
   end
-  FileUtils.cp 'Procfile.dev', 'Procfile' unless File.file?('Procfile')
+  FileUtils.cp "Procfile.dev", "Procfile" unless File.file?("Procfile")
 end
 
 def database_config
   log "\n== Dropping & recreating the development database"
-  system! 'bin/rails db:drop db:create > /dev/null 2>&1'
+  system! "bin/rails db:drop db:create > /dev/null 2>&1"
 
   log "\n== Loading the database schema"
-  system! 'bin/rails db:schema:load db:migrate'
+  system! "bin/rails db:schema:load db:migrate"
 
   log "\n== Seeding the database"
-  system!({'SEED_DEV_ENV' => 'true'}, 'bin/rails db:seed')
+  system!({"SEED_DEV_ENV" => "true"}, "bin/rails db:seed")
 
   log "\n== Dropping & recreating the test database"
-  system!({'RAILS_ENV' => 'test'},
-    'bin/rails db:drop db:create db:schema:load > /dev/null 2>&1')
+  system!({"RAILS_ENV" => "test"},
+    "bin/rails db:drop db:create db:schema:load > /dev/null 2>&1")
 
   log "\n== Removing old logs and tempfiles =="
-  system! 'bin/rails log:clear tmp:clear > /dev/null 2>&1'
+  system! "bin/rails log:clear tmp:clear > /dev/null 2>&1"
 end
 
 def docker_checks
   log "\n== Ensure Docker is running"
-  unless system('docker info > /dev/null 2>&1')
+  unless system("docker info > /dev/null 2>&1")
     log "\n== Starting Docker..."
-    system('open -a Docker')
+    system("open -a Docker")
     sleep 10
-    system('docker info > /dev/null 2>&1')
+    system("docker info > /dev/null 2>&1")
   end
 
   # Handle database container
   log "\n== Checking database container"
   if system("docker ps | grep #{DB_NAME} > /dev/null 2>&1")
     log "\n== Database container is already running"
-  else
-    if system("docker inspect #{DB_NAME} > /dev/null 2>&1")
-      log "\n== Removing failed database container"
-      system("docker rm -f #{DB_NAME}")
-      log "\n== Creating new database container"
-      unless system("docker run -d --name #{DB_NAME} -p #{DB_PORT}:5432 -e 'POSTGRES_PASSWORD=postgres' -v #{DB_NAME}:/var/lib/postgresql/data postgres:#{DB_VERSION}")
-        log "\n== Failed to create database container, trying to start existing one"
-        system("docker start #{DB_NAME}")
-      end
-      sleep 5
-    else
-      log "\n== Creating new database container"
-      system("docker run -d --name #{DB_NAME} -p #{DB_PORT}:5432 -e 'POSTGRES_PASSWORD=postgres' -v #{DB_NAME}:/var/lib/postgresql/data postgres:#{DB_VERSION}")
-      sleep 5
+  elsif system("docker inspect #{DB_NAME} > /dev/null 2>&1")
+    log "\n== Removing failed database container"
+    system("docker rm -f #{DB_NAME}")
+    log "\n== Creating new database container"
+    unless system("docker run -d --name #{DB_NAME} -p #{DB_PORT}:5432 -e 'POSTGRES_PASSWORD=postgres' -v #{DB_NAME}:/var/lib/postgresql/data postgres:#{DB_VERSION}")
+      log "\n== Failed to create database container, trying to start existing one"
+      system("docker start #{DB_NAME}")
     end
+    sleep 5
+  else
+    log "\n== Creating new database container"
+    system("docker run -d --name #{DB_NAME} -p #{DB_PORT}:5432 -e 'POSTGRES_PASSWORD=postgres' -v #{DB_NAME}:/var/lib/postgresql/data postgres:#{DB_VERSION}")
+    sleep 5
   end
 
   # Handle redis container
   log "\n== Checking redis container"
   if system("docker ps | grep #{REDIS_NAME} > /dev/null 2>&1")
     log "\n== Redis container is already running"
-  else
-    if system("docker inspect #{REDIS_NAME} > /dev/null 2>&1")
-      log "\n== Removing failed redis container"
-      system("docker rm -f #{REDIS_NAME}")
-      log "\n== Creating new redis container"
-      unless system("docker run -d --name #{REDIS_NAME} -p #{REDIS_PORT}:6379 redis:#{REDIS_VERSION}")
-        log "\n== Failed to create redis container, trying to start existing one"
-        system("docker start #{REDIS_NAME}")
-      end
-    else
-      log "\n== Creating new redis container"
-      system("docker run -d --name #{REDIS_NAME} -p #{REDIS_PORT}:6379 redis:#{REDIS_VERSION}")
+  elsif system("docker inspect #{REDIS_NAME} > /dev/null 2>&1")
+    log "\n== Removing failed redis container"
+    system("docker rm -f #{REDIS_NAME}")
+    log "\n== Creating new redis container"
+    unless system("docker run -d --name #{REDIS_NAME} -p #{REDIS_PORT}:6379 redis:#{REDIS_VERSION}")
+      log "\n== Failed to create redis container, trying to start existing one"
+      system("docker start #{REDIS_NAME}")
     end
+  else
+    log "\n== Creating new redis container"
+    system("docker run -d --name #{REDIS_NAME} -p #{REDIS_PORT}:6379 redis:#{REDIS_VERSION}")
   end
 
   # Verify containers are running
@@ -184,9 +180,9 @@ end
 
 def yarn_config
   log "\n== Installing Node modules"
-  system! 'corepack enable'
-  system! 'corepack use yarn@stable'
-  system! 'yarn check --check-files > /dev/null 2>&1 || yarn install'
+  system! "corepack enable"
+  system! "corepack use yarn@stable"
+  system! "yarn check --check-files > /dev/null 2>&1 || yarn install"
 end
 
 def git_config
@@ -197,11 +193,11 @@ end
 def env_file_setup
   log '\n== Setting up .env file'
 
-  return log('.env file already exists. Doing nothing.') if File.exist?('.env')
-  return log('\n WARNING: .env.example not found. Skipping .env creation') unless File.exist?('.env.example')
+  return log(".env file already exists. Doing nothing.") if File.exist?(".env")
+  return log('\n WARNING: .env.example not found. Skipping .env creation') unless File.exist?(".env.example")
 
-  FileUtils.cp('.env.example', '.env')
-  log '.env file created from .env.example'
+  FileUtils.cp(".env.example", ".env")
+  log ".env file created from .env.example"
 end
 
 def setup
@@ -228,7 +224,7 @@ def setup
 
     log "\n== All set up."
   end
-rescue StandardError => _exc
+rescue => _exc
   log $ERROR_INFO
   abort
 end

@@ -19,8 +19,8 @@ module Discharger
       end
 
       def run
-        require 'rainbow'
-        unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+        require "rainbow"
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           puts Rainbow("\n🚀 Starting setup for #{config.app_name}").bright.blue
           puts Rainbow("=" * 50).blue
         end
@@ -29,11 +29,11 @@ module Discharger
           execute_commands
         end
 
-        unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           puts Rainbow("\n✅ Setup completed successfully!").bright.green
         end
       rescue => e
-        unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           puts Rainbow("\n❌ Setup failed: #{e.message}").bright.red
         end
         raise Error, e.message
@@ -84,20 +84,20 @@ module Discharger
 
       def execute_command(command)
         unless command.can_execute?
-          unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
-            require 'rainbow'
+          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
+            require "rainbow"
             puts Rainbow("⏭️  Skipping #{command.description} (prerequisites not met)").yellow
           end
           return
         end
 
-        unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           puts Rainbow("\n▶️  #{command.description}").bright
         end
         command.execute
       rescue => e
-        unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
-          require 'rainbow'
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
+          require "rainbow"
           puts Rainbow("❌ Command #{command.description} failed: #{e.message}").red
         end
         raise e

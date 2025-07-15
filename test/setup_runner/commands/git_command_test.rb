@@ -30,14 +30,14 @@ class GitCommandTest < ActiveSupport::TestCase
 
   test "execute sets up commit template when .commit-template exists" do
     create_file(".commit-template", "[TICKET-ID] Subject\n\nBody")
-    
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     assert_includes commands_run, "git config --local commit.template .commit-template"
   end
 
@@ -46,22 +46,22 @@ class GitCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     refute commands_run.any? { |cmd| cmd.include?("commit.template") }
   end
 
   test "execute sets up git hooks path when .githooks directory exists" do
     FileUtils.mkdir_p(File.join(@test_dir, ".githooks"))
-    
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     assert_includes commands_run, "git config --local core.hooksPath .githooks"
   end
 
@@ -70,9 +70,9 @@ class GitCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     refute commands_run.any? { |cmd| cmd.include?("hooksPath") }
   end
 
@@ -82,14 +82,14 @@ class GitCommandTest < ActiveSupport::TestCase
       "user.email" => "test@example.com",
       "pull.rebase" => "true"
     }
-    
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     assert_includes commands_run, "git config --local user.name 'Test User'"
     assert_includes commands_run, "git config --local user.email 'test@example.com'"
     assert_includes commands_run, "git config --local pull.rebase 'true'"
@@ -98,15 +98,15 @@ class GitCommandTest < ActiveSupport::TestCase
   test "execute handles all git setup options together" do
     create_file(".commit-template", "Template")
     FileUtils.mkdir_p(File.join(@test_dir, ".githooks"))
-    @config.git_config = { "core.autocrlf" => "input" }
-    
+    @config.git_config = {"core.autocrlf" => "input"}
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     assert_equal 3, commands_run.size
     assert commands_run.any? { |cmd| cmd.include?("commit.template") }
     assert commands_run.any? { |cmd| cmd.include?("hooksPath") }
@@ -116,16 +116,16 @@ class GitCommandTest < ActiveSupport::TestCase
   test "execute logs all activities" do
     create_file(".commit-template", "Template")
     FileUtils.mkdir_p(File.join(@test_dir, ".githooks"))
-    @config.git_config = { "user.name" => "Test" }
-    
+    @config.git_config = {"user.name" => "Test"}
+
     io = StringIO.new
     logger = Logger.new(io)
     command = Discharger::SetupRunner::Commands::GitCommand.new(@config, @test_dir, logger)
-    
+
     command.define_singleton_method(:system!) { |*args| }
-    
+
     command.execute
-    
+
     log_output = io.string
     assert_match(/Setting up git configuration/, log_output)
     assert_match(/Git commit template configured/, log_output)
@@ -135,11 +135,11 @@ class GitCommandTest < ActiveSupport::TestCase
 
   test "execute handles git command failures" do
     create_file(".commit-template", "Template")
-    
+
     @command.define_singleton_method(:system!) do |*args|
       raise "Git config failed"
     end
-    
+
     assert_raises(RuntimeError) do
       @command.execute
     end

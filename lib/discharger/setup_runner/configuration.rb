@@ -19,7 +19,7 @@ module Discharger
       def self.from_file(path)
         config = new
         yaml = YAML.load_file(path)
-        
+
         # Handle empty YAML files
         return config if yaml.nil? || yaml == false
 

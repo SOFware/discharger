@@ -7,7 +7,7 @@ class ConfigurationTest < ActiveSupport::TestCase
 
   test "initializes with default values" do
     config = Discharger::SetupRunner::Configuration.new
-    
+
     assert_equal "Application", config.app_name
     assert_instance_of Discharger::SetupRunner::DatabaseConfig, config.db_config
     assert_instance_of Discharger::SetupRunner::RedisConfig, config.redis_config
@@ -38,11 +38,11 @@ class ConfigurationTest < ActiveSupport::TestCase
         - name: custom_task
           command: echo "custom"
     YAML
-    
+
     create_file("test_config.yml", yaml_content)
-    
+
     config = Discharger::SetupRunner::Configuration.from_file("test_config.yml")
-    
+
     assert_equal "MyTestApp", config.app_name
     assert_equal 5433, config.db_config.port
     assert_equal "my-db", config.db_config.name
@@ -62,11 +62,11 @@ class ConfigurationTest < ActiveSupport::TestCase
       database:
         port: 5434
     YAML
-    
+
     create_file("partial_config.yml", yaml_content)
-    
+
     config = Discharger::SetupRunner::Configuration.from_file("partial_config.yml")
-    
+
     assert_equal "PartialApp", config.app_name
     assert_equal 5434, config.db_config.port
     # Check defaults are preserved
@@ -77,9 +77,9 @@ class ConfigurationTest < ActiveSupport::TestCase
 
   test "handles empty YAML file" do
     create_file("empty_config.yml", "")
-    
+
     config = Discharger::SetupRunner::Configuration.from_file("empty_config.yml")
-    
+
     # Should use all defaults
     assert_equal "Application", config.app_name
     assert_equal 5432, config.db_config.port
@@ -96,7 +96,7 @@ end
 class DatabaseConfigTest < ActiveSupport::TestCase
   test "initializes with default values" do
     config = Discharger::SetupRunner::DatabaseConfig.new
-    
+
     assert_equal 5432, config.port
     assert_equal "db-app", config.name
     assert_equal "14", config.version
@@ -105,14 +105,14 @@ class DatabaseConfigTest < ActiveSupport::TestCase
 
   test "updates from hash" do
     config = Discharger::SetupRunner::DatabaseConfig.new
-    
+
     config.from_hash({
       "port" => 5433,
       "name" => "custom-db",
       "version" => "15",
       "password" => "custom-pass"
     })
-    
+
     assert_equal 5433, config.port
     assert_equal "custom-db", config.name
     assert_equal "15", config.version
@@ -121,9 +121,9 @@ class DatabaseConfigTest < ActiveSupport::TestCase
 
   test "partial update preserves other values" do
     config = Discharger::SetupRunner::DatabaseConfig.new
-    
+
     config.from_hash({"port" => 5433})
-    
+
     assert_equal 5433, config.port
     assert_equal "db-app", config.name  # unchanged
     assert_equal "14", config.version    # unchanged
@@ -134,7 +134,7 @@ end
 class RedisConfigTest < ActiveSupport::TestCase
   test "initializes with default values" do
     config = Discharger::SetupRunner::RedisConfig.new
-    
+
     assert_equal 6379, config.port
     assert_equal "redis-app", config.name
     assert_equal "latest", config.version
@@ -142,13 +142,13 @@ class RedisConfigTest < ActiveSupport::TestCase
 
   test "updates from hash" do
     config = Discharger::SetupRunner::RedisConfig.new
-    
+
     config.from_hash({
       "port" => 6380,
       "name" => "custom-redis",
       "version" => "7.0"
     })
-    
+
     assert_equal 6380, config.port
     assert_equal "custom-redis", config.name
     assert_equal "7.0", config.version
@@ -156,9 +156,9 @@ class RedisConfigTest < ActiveSupport::TestCase
 
   test "partial update preserves other values" do
     config = Discharger::SetupRunner::RedisConfig.new
-    
+
     config.from_hash({"port" => 6380})
-    
+
     assert_equal 6380, config.port
     assert_equal "redis-app", config.name  # unchanged
     assert_equal "latest", config.version   # unchanged

@@ -27,7 +27,7 @@ class BaseCommandTest < ActiveSupport::TestCase
 
   def setup
     super
-    @config = { "test" => "config" }
+    @config = {"test" => "config"}
     @logger = Logger.new(StringIO.new)
     @command = TestCommand.new(@config, @test_dir, @logger)
   end
@@ -57,27 +57,27 @@ class BaseCommandTest < ActiveSupport::TestCase
     io = StringIO.new
     logger = Logger.new(io)
     command = TestCommand.new(@config, @test_dir, logger)
-    
+
     command.send(:log, "Test message")
-    
+
     assert_match(/\[TestCommand\] Test message/, io.string)
   end
 
   test "system! executes command successfully" do
     command = TestCommand.new(@config, @test_dir, @logger)
-    
+
     # Since NO_SPINNER is set, system! should work without spinner
     _stdout, _stderr = capture_output do
       command.send(:system!, "echo", "hello")
     end
-    
+
     # The command should execute without raising
     assert true, "Command executed successfully"
   end
 
   test "system! raises error on command failure" do
     command = FailingTestCommand.new(@config, @test_dir, @logger)
-    
+
     error = assert_raises(RuntimeError) do
       command.execute
     end
@@ -86,64 +86,64 @@ class BaseCommandTest < ActiveSupport::TestCase
 
   test "system! doesn't raise for docker command failures" do
     command = TestCommand.new(@config, @test_dir, @logger)
-    
+
     # Docker commands that fail should not raise
     # Using a docker command that will fail
     _stdout, _stderr = capture_output do
       command.send(:system!, "docker", "run", "--fake-flag-that-doesnt-exist")
     end
-    
+
     # Should not raise an error for docker commands
     assert true, "Docker command failure handled gracefully"
   end
 
   test "ask_to_install prompts user and yields on Y" do
     command = TestCommand.new(@config, @test_dir, @logger)
-    
+
     # Simulate user input
     input = StringIO.new("Y\n")
     command.define_singleton_method(:gets) { input.gets }
-    
+
     yielded = false
     output, _ = with_output_enabled do
       capture_output do
         command.send(:ask_to_install, "test tool") { yielded = true }
       end
     end
-    
+
     assert yielded
     assert_match(/You do not currently use test tool/, output)
   end
 
   test "ask_to_install doesn't yield on non-Y input" do
     command = TestCommand.new(@config, @test_dir, @logger)
-    
+
     # Simulate user input
     input = StringIO.new("n\n")
     command.define_singleton_method(:gets) { input.gets }
-    
+
     yielded = false
     capture_output do
       command.send(:ask_to_install, "test tool") { yielded = true }
     end
-    
+
     refute yielded
   end
 
   test "proceed_with prompts user and yields on Y" do
     command = TestCommand.new(@config, @test_dir, @logger)
-    
+
     # Simulate user input
     input = StringIO.new("Y\n")
     command.define_singleton_method(:gets) { input.gets }
-    
+
     yielded = false
     output, _ = with_output_enabled do
       capture_output do
         command.send(:proceed_with, "test task") { yielded = true }
       end
     end
-    
+
     assert yielded
     assert_match(/Proceed with test task\?/, output)
   end

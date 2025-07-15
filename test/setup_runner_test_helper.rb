@@ -8,9 +8,9 @@ module SetupRunnerTestHelper
     @test_dir = Dir.mktmpdir("discharger_test")
     FileUtils.cd(@test_dir)
     # Disable spinners and colored output in tests
-    ENV['NO_SPINNER'] = '1'
+    ENV["NO_SPINNER"] = "1"
     # Suppress setup runner output by default in tests
-    ENV['QUIET_SETUP'] = '1'
+    ENV["QUIET_SETUP"] = "1"
   end
 
   def teardown
@@ -41,9 +41,9 @@ module SetupRunnerTestHelper
     stderr_io = StringIO.new
     $stdout = stdout_io
     $stderr = stderr_io
-    
+
     yield
-    
+
     [stdout_io.string, stderr_io.string]
   ensure
     $stdout = original_stdout
@@ -62,19 +62,19 @@ module SetupRunnerTestHelper
   def assert_file_contains(path, content, message = nil)
     assert_file_exists(path)
     file_content = File.read(path)
-    assert file_content.include?(content), 
-           message || "Expected file #{path} to contain: #{content}\nActual content: #{file_content}"
+    assert file_content.include?(content),
+      message || "Expected file #{path} to contain: #{content}\nActual content: #{file_content}"
   end
-  
+
   def refute_file_exists(path, message = nil)
     refute File.exist?(path), message || "Expected file #{path} not to exist"
   end
-  
+
   def refute_file_contains(path, content, message = nil)
     return unless File.exist?(path)
     file_content = File.read(path)
-    refute file_content.include?(content), 
-           message || "Expected file #{path} not to contain: #{content}\nActual content: #{file_content}"
+    refute file_content.include?(content),
+      message || "Expected file #{path} not to contain: #{content}\nActual content: #{file_content}"
   end
 
   def stub_system_call(command, success: true, output: "")
@@ -88,13 +88,13 @@ module SetupRunnerTestHelper
       end
     end
   end
-  
+
   def with_output_enabled(&block)
     # Temporarily enable output for tests that need to capture it
-    original_quiet = ENV['QUIET_SETUP']
-    ENV.delete('QUIET_SETUP')
+    original_quiet = ENV["QUIET_SETUP"]
+    ENV.delete("QUIET_SETUP")
     yield
   ensure
-    ENV['QUIET_SETUP'] = original_quiet if original_quiet
+    ENV["QUIET_SETUP"] = original_quiet if original_quiet
   end
 end

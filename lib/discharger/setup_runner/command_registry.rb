@@ -27,21 +27,21 @@ module Discharger
         def load_commands
           # Load base command first
           require_relative "commands/base_command"
-          
+
           # Load all command files from the commands directory
           commands_dir = File.expand_path("commands", __dir__)
           Dir.glob(File.join(commands_dir, "*_command.rb")).each do |file|
             require file
           end
-          
+
           # Auto-register commands based on naming convention
           Commands.constants.each do |const_name|
             next unless const_name.to_s.end_with?("Command")
-            
+
             command_class = Commands.const_get(const_name)
             next unless command_class < Commands::BaseCommand
             next if command_class == Commands::BaseCommand
-            
+
             # Convert class name to command name (e.g., AsdfCommand -> asdf)
             command_name = const_name.to_s.sub(/Command$/, "").gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, "")
             register(command_name, command_class)

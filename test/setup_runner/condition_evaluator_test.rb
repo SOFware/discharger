@@ -39,7 +39,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
 
   test "evaluates ENV variable access" do
     ENV["TEST_VAR"] = "test_value"
-    
+
     assert_equal "test_value", evaluator.evaluate("ENV['TEST_VAR']")
     assert_nil evaluator.evaluate("ENV['NON_EXISTENT_VAR']")
   ensure
@@ -48,7 +48,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
 
   test "evaluates ENV variable comparisons" do
     ENV["TEST_VAR"] = "production"
-    
+
     assert evaluator.evaluate("ENV['TEST_VAR'] == 'production'")
     refute evaluator.evaluate("ENV['TEST_VAR'] == 'development'")
     assert evaluator.evaluate("ENV['TEST_VAR'] != 'development'")
@@ -61,7 +61,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
     Dir.mktmpdir do |dir|
       test_file = File.join(dir, "test.txt")
       File.write(test_file, "test")
-      
+
       assert evaluator.evaluate("File.exist?('#{test_file}')")
       refute evaluator.evaluate("File.exist?('#{File.join(dir, "non_existent.txt")}')")
     end
@@ -71,7 +71,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
     Dir.mktmpdir do |dir|
       test_file = File.join(dir, "test.txt")
       File.write(test_file, "test")
-      
+
       assert evaluator.evaluate("File.directory?('#{dir}')")
       refute evaluator.evaluate("File.directory?('#{test_file}')")
     end
@@ -81,7 +81,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
     Dir.mktmpdir do |dir|
       test_file = File.join(dir, "test.txt")
       File.write(test_file, "test")
-      
+
       assert evaluator.evaluate("File.file?('#{test_file}')")
       refute evaluator.evaluate("File.file?('#{dir}')")
     end
@@ -99,13 +99,13 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
     Dir.mktmpdir do |dir|
       config_file = File.join(dir, "config.yml")
       File.write(config_file, "test: true")
-      
+
       condition = "ENV['RAILS_ENV'] == 'test' && File.exist?('#{config_file}')"
       assert evaluator.evaluate(condition)
-      
+
       condition = "ENV['RAILS_ENV'] == 'production' || File.exist?('#{config_file}')"
       assert evaluator.evaluate(condition)
-      
+
       condition = "ENV['RAILS_ENV'] == 'production' && File.exist?('#{config_file}')"
       refute evaluator.evaluate(condition)
     end
@@ -164,18 +164,18 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
       original_logger = Rails.logger
       log_output = StringIO.new
       Rails.logger = Logger.new(log_output)
-      
+
       evaluator.evaluate("invalid syntax {{")
-      
+
       Rails.logger = original_logger
       assert_match(/Condition evaluation failed/, log_output.string)
     else
       # For non-Rails environment, capture stderr
       original_stderr = $stderr
       $stderr = StringIO.new
-      
+
       evaluator.evaluate("invalid syntax {{")
-      
+
       assert_match(/Condition evaluation failed/, $stderr.string)
       $stderr = original_stderr
     end
@@ -183,7 +183,7 @@ class ConditionEvaluatorTest < ActiveSupport::TestCase
 
   test "handles nil ENV variables in comparisons" do
     ENV.delete("NON_EXISTENT") # Ensure it doesn't exist
-    
+
     refute evaluator.evaluate("ENV['NON_EXISTENT'] == 'value'")
     assert evaluator.evaluate("ENV['NON_EXISTENT'] != 'value'")
   end

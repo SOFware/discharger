@@ -28,7 +28,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
 
   test "execute installs bundler and runs bundle install when bundle check fails" do
     create_file("Gemfile", "source 'https://rubygems.org'")
-    
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
@@ -39,11 +39,11 @@ class BundlerCommandTest < ActiveSupport::TestCase
       command = args.join(" ")
       commands_run << command
       # bundle check fails
-      args.join(" ") == "bundle check" ? false : true
+      !(args.join(" ") == "bundle check")
     end
-    
+
     @command.execute
-    
+
     assert_equal 3, commands_run.size
     assert_equal "gem install bundler --conservative", commands_run[0]
     assert_equal "bundle check", commands_run[1]
@@ -52,7 +52,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
 
   test "execute installs bundler but skips bundle install when bundle check succeeds" do
     create_file("Gemfile", "source 'https://rubygems.org'")
-    
+
     commands_run = []
     @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
@@ -63,9 +63,9 @@ class BundlerCommandTest < ActiveSupport::TestCase
       commands_run << command
       true # all commands succeed
     end
-    
+
     @command.execute
-    
+
     assert_equal 2, commands_run.size
     assert_equal "gem install bundler --conservative", commands_run[0]
     # bundle check is called via system, not system!, so it's the last one
@@ -75,27 +75,27 @@ class BundlerCommandTest < ActiveSupport::TestCase
 
   test "execute logs activity" do
     create_file("Gemfile", "source 'https://rubygems.org'")
-    
+
     io = StringIO.new
     logger = Logger.new(io)
     command = Discharger::SetupRunner::Commands::BundlerCommand.new(@config, @test_dir, logger)
-    
+
     command.define_singleton_method(:system!) { |*args| }
     command.define_singleton_method(:system_quiet) { |*args| true }
-    
+
     command.execute
-    
+
     log_output = io.string
     assert_match(/\[BundlerCommand\] Installing dependencies/, log_output)
   end
 
   test "execute handles gem install failure" do
     create_file("Gemfile", "source 'https://rubygems.org'")
-    
+
     @command.define_singleton_method(:system!) do |*args|
       raise "gem install bundler --conservative failed:"
     end
-    
+
     assert_raises(RuntimeError) do
       @command.execute
     end
@@ -103,7 +103,7 @@ class BundlerCommandTest < ActiveSupport::TestCase
 
   test "execute handles bundle install failure" do
     create_file("Gemfile", "source 'https://rubygems.org'")
-    
+
     @command.define_singleton_method(:system!) do |*args|
       command = args.join(" ")
       if command == "bundle install"
@@ -112,9 +112,9 @@ class BundlerCommandTest < ActiveSupport::TestCase
     end
     @command.define_singleton_method(:system_quiet) do |*args|
       command = args.join(" ")
-      command == "bundle check" ? false : true
+      !(command == "bundle check")
     end
-    
+
     assert_raises(RuntimeError) do
       @command.execute
     end

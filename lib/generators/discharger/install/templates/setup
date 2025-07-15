@@ -23,14 +23,14 @@ FileUtils.chdir APP_ROOT do
 
   puts "== Running Discharger setup =="
   puts "Configuration loaded from: config/setup.yml"
-  
+
   # Load Rails environment first, then discharger
   require_relative "../config/application"
   Rails.application.initialize!
-  
+
   # Load the discharger gem and run the setup
   require "discharger"
   Discharger::SetupRunner.run("config/setup.yml")
-  
+
   puts "\n== Setup completed successfully! =="
 end

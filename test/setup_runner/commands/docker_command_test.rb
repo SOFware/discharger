@@ -20,46 +20,46 @@ class DockerCommandTest < ActiveSupport::TestCase
 
   test "can_execute? returns false when docker is not installed" do
     @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker" ? false : true
+      !(cmd == "which docker")
     end
-    
+
     refute @command.can_execute?
   end
 
   test "can_execute? returns false when no containers are configured" do
     @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker" ? true : false
+      cmd == "which docker"
     end
-    
+
     refute @command.can_execute?
   end
 
   test "can_execute? returns true when docker exists and database is configured" do
     @config.database = OpenStruct.new(name: "db-test")
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker" ? true : false
+      cmd == "which docker"
     end
-    
+
     assert @command.can_execute?
   end
 
   test "can_execute? returns true when docker exists and redis is configured" do
     @config.redis = OpenStruct.new(name: "redis-test")
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker" ? true : false
+      cmd == "which docker"
     end
-    
+
     assert @command.can_execute?
   end
 
   test "execute starts Docker if not running" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14")
-    
+
     docker_started = false
     container_created = false
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -75,16 +75,16 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:system!) do |*args|
       cmd = args.join(" ")
       container_created = true if cmd.include?("docker run")
     end
-    
+
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     @command.execute
-    
+
     assert docker_started
     assert container_created
   end
@@ -96,9 +96,9 @@ class DockerCommandTest < ActiveSupport::TestCase
       version: "15",
       password: "secret"
     )
-    
+
     commands_run = []
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -112,15 +112,15 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     @command.execute
-    
+
     docker_run = commands_run.find { |cmd| cmd.include?("docker run") }
     assert docker_run
     assert_match(/--name db-test/, docker_run)
@@ -136,9 +136,9 @@ class DockerCommandTest < ActiveSupport::TestCase
       port: 6380,
       version: "7"
     )
-    
+
     commands_run = []
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -152,15 +152,15 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     @command.execute
-    
+
     docker_run = commands_run.find { |cmd| cmd.include?("docker run") }
     assert docker_run
     assert_match(/--name redis-test/, docker_run)
@@ -170,9 +170,9 @@ class DockerCommandTest < ActiveSupport::TestCase
 
   test "execute starts existing stopped container" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432)
-    
+
     commands_run = []
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -189,19 +189,19 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     @command.execute
-    
+
     assert_includes commands_run, "docker start db-test"
   end
 
   test "execute recreates container if start fails" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432)
-    
+
     commands_run = []
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -219,47 +219,44 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     @command.execute
-    
+
     assert_includes commands_run, "docker rm -f db-test"
     assert commands_run.any? { |cmd| cmd.include?("docker run") }
   end
 
   test "execute skips container if already running" do
     @config.database = OpenStruct.new(name: "db-test")
-    
+
     commands_run = []
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*db-test/
-        true # Already running
-      else
-        true
       end
+      true
     end
-    
+
     @command.define_singleton_method(:system!) do |*args|
       commands_run << args.join(" ")
     end
-    
+
     @command.execute
-    
+
     assert_empty commands_run
   end
 
   test "execute raises error if container fails to start" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432)
-    
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when "docker info > /dev/null 2>&1"
@@ -272,10 +269,10 @@ class DockerCommandTest < ActiveSupport::TestCase
         true
       end
     end
-    
+
     @command.define_singleton_method(:system!) { |*args| }
     @command.define_singleton_method(:sleep) { |_| }
-    
+
     assert_raises(RuntimeError) do
       @command.execute
     end

@@ -35,7 +35,7 @@ module Discharger
         end
 
         def with_spinner(message)
-          if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty? || ENV['QUIET_SETUP']
+          if ENV["CI"] || ENV["NO_SPINNER"] || !$stdout.tty? || ENV["QUIET_SETUP"]
             result = yield
             # Handle error case when spinner is disabled
             if result.is_a?(Hash) && !result[:success] && result[:raise_error] != false
@@ -43,17 +43,17 @@ module Discharger
             end
             return result
           end
-          
-          require 'rainbow'
+
+          require "rainbow"
           spinner_chars = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏]
           spinner_thread = nil
           stop_spinner = false
-          
+
           begin
             # Print initial message
             print Rainbow("◯ #{message}").cyan
             $stdout.flush
-            
+
             # Start spinner in background thread
             spinner_thread = Thread.new do
               i = 0
@@ -64,31 +64,31 @@ module Discharger
                 i += 1
               end
             end
-            
+
             # Execute the block
             result = yield
-            
+
             # Stop spinner
             stop_spinner = true
             spinner_thread&.join(0.1)
-            
+
             # Clear line and print result
             if result.is_a?(Hash)
               if result[:success]
-                puts "\r#{Rainbow(result[:message] || '✓').green} #{message}"
+                puts "\r#{Rainbow(result[:message] || "✓").green} #{message}"
               else
-                puts "\r#{Rainbow(result[:message] || '✗').red} #{message}"
+                puts "\r#{Rainbow(result[:message] || "✗").red} #{message}"
                 raise result[:error] if result[:error] && result[:raise_error] != false
               end
             else
-              puts "\r#{Rainbow('✓').green} #{message}"
+              puts "\r#{Rainbow("✓").green} #{message}"
             end
-            
+
             result
           rescue
             stop_spinner = true
             spinner_thread&.join(0.1)
-            puts "\r#{Rainbow('✗').red} #{message}"
+            puts "\r#{Rainbow("✗").red} #{message}"
             raise
           ensure
             stop_spinner = true
@@ -97,12 +97,12 @@ module Discharger
         end
 
         def simple_action(message)
-          return yield if ENV['CI'] || ENV['NO_SPINNER'] || !$stdout.tty? || ENV['QUIET_SETUP']
-          
-          require 'rainbow'
+          return yield if ENV["CI"] || ENV["NO_SPINNER"] || !$stdout.tty? || ENV["QUIET_SETUP"]
+
+          require "rainbow"
           print Rainbow("  → #{message}...").cyan
           $stdout.flush
-          
+
           begin
             result = yield
             puts Rainbow(" ✓").green
@@ -114,49 +114,48 @@ module Discharger
         end
 
         def system!(*args)
-          require 'open3'
+          require "open3"
           command_str = args.join(" ")
-          
+
           # Create a more readable message for the spinner
           spinner_message = if command_str.length > 80
             if args.first.is_a?(Hash)
               # Skip env hash in display
-              cmd_args = args[1..-1]
+              cmd_args = args[1..]
               base_cmd = cmd_args.take(3).join(" ")
-              "Executing #{base_cmd}..."
             else
               base_cmd = args.take(3).join(" ")
-              "Executing #{base_cmd}..."
             end
+            "Executing #{base_cmd}..."
           else
             "Executing #{command_str}"
           end
-          
+
           result = with_spinner(spinner_message) do
             stdout, stderr, status = Open3.capture3(*args)
-            
+
             if status.success?
               # Log output if there is any (for debugging)
               logger&.debug("Output: #{stdout}") if stdout && !stdout.empty?
-              { success: true, message: "✓" }
+              {success: true, message: "✓"}
             elsif args.first.to_s.include?("docker")
               logger&.debug("Error: #{stderr}") if stderr && !stderr.empty?
-              { success: false, message: "✗ (Docker command failed)", raise_error: false }
+              {success: false, message: "✗ (Docker command failed)", raise_error: false}
             else
-              { success: false, message: "✗", error: "#{command_str} failed: #{stderr}" }
+              {success: false, message: "✗", error: "#{command_str} failed: #{stderr}"}
             end
           end
-          
+
           # Handle the case when spinner is disabled
           if result.is_a?(Hash) && !result[:success] && result[:raise_error] != false
             raise result[:error]
           end
-          
+
           result
         end
 
         def system_quiet(*args)
-          require 'open3'
+          require "open3"
           stdout, _stderr, status = Open3.capture3(*args)
           logger&.debug("Quietly executed #{args.join(" ")} - success: #{status.success?}")
           logger&.debug("Output: #{stdout}") if stdout && !stdout.empty? && logger
@@ -164,7 +163,7 @@ module Discharger
         end
 
         def ask_to_install(description)
-          unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
             puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
           end
           if gets.chomp == "Y"
@@ -173,7 +172,7 @@ module Discharger
         end
 
         def proceed_with(task)
-          unless ENV['QUIET_SETUP'] || ENV['DISABLE_OUTPUT']
+          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
             puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
           end
           if gets.chomp == "Y"

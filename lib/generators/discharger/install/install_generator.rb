@@ -3,10 +3,10 @@ module Discharger
     class InstallGenerator < Rails::Generators::Base
       source_root File.expand_path("templates", __dir__)
 
-      class_option :setup_path, 
-                   type: :string, 
-                   default: "bin/setup",
-                   desc: "Path where the setup script should be created"
+      class_option :setup_path,
+        type: :string,
+        default: "bin/setup",
+        desc: "Path where the setup script should be created"
 
       def copy_initializer
         template "discharger_initializer.rb", "config/initializers/discharger.rb"
@@ -14,7 +14,7 @@ module Discharger
 
       def create_setup_script
         template "setup", options[:setup_path]
-        chmod options[:setup_path], 0755
+        chmod options[:setup_path], 0o755
       end
 
       def create_sample_setup_yml

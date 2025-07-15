@@ -23,7 +23,7 @@ module Discharger
           when :program_node
             # Evaluate the first statement in the program
             stmts = node.statements
-            if stmts && stmts.body.any?
+            if stmts&.body&.any?
               evaluate_node(stmts.body.first)
             else
               true
