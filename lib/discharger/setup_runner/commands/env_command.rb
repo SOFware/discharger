@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require_relative "base_command"
 
 module Discharger
   module SetupRunner
