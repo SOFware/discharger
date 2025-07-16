@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.2.12] - Unreleased
+
 ## [0.2.11] - 2025-07-16
 
 ### Added
@@ -44,9 +46,3 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Progress indicators that work in CI environments
   - Cleaner output for database operations (no more verbose Rails runner scripts)
   - Smart truncation of long commands in spinner messages
-
-## [0.2.10] - 2025-04-11
-
-### Fixed
-
-- Fixed the incorrectly named new version branch.
