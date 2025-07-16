@@ -30,11 +30,54 @@ jobs:
           bundler-cache: true
           ruby-version: ruby
 
-      # Build and Release
-      - name: Build gem with checksum
-        run: bundle exec rake build:checksum
+      # Configure bundler for modifications
+      - name: Configure Bundler
+        run: |
+          bundle config set frozen false
 
-      - name: Release gem
-        run: bundle exec rake release
+      # Release gem (will automatically bump version via reissue)
+      - name: Release gem to RubyGems
+        run: |
+          # The release task will:
+          # 1. Push gem to RubyGems
+          # 2. Automatically run rake reissue (with default patch segment)
+          # Since GITHUB_ACTIONS is set, reissue won't commit
+          bundle exec rake release
         env:
           GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+
+      # Get the new version
+      - name: Get new version
+        id: new_version
+        run: |
+          new_version=$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
+      # Create PR for next version
+      - name: Create Pull Request for next version
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bump-version-${{ steps.new_version.outputs.new_version }}
+          base: main
+          commit-message: "Bump version to ${{ steps.new_version.outputs.new_version }}"
+          title: "Bump version to ${{ steps.new_version.outputs.new_version }}"
+          body: |
+            ## 🔄 Post-Release Version Bump
+
+            This PR prepares the codebase for development of version ${{ steps.new_version.outputs.new_version }}.
+
+            ### Changes Made
+            - ✅ Version bumped to ${{ steps.new_version.outputs.new_version }}
+            - ✅ CHANGELOG.md prepared with new Unreleased section
+            - ✅ Gemfile.lock updated with new version
+            - ✅ All dependencies resolved via bundle install
+
+            ### Next Steps
+            1. Review the version bump
+            2. Merge this PR to continue development
+
+            All future commits will be tracked under version ${{ steps.new_version.outputs.new_version }}.
+          labels: |
+            dependencies
+            automated

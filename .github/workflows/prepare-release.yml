@@ -28,18 +28,20 @@ jobs:
           bundler-cache: true
           ruby-version: ruby
       
+      - name: Configure Bundler
+        run: |
+          bundle config set frozen false
+
       - name: Get current version
         id: current_version
         run: |
           current_version=$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')
           echo "current_version=$current_version" >> $GITHUB_OUTPUT
 
-      - name: Prepare release with Reissue
+      - name: Build and finalize release
         run: |
-          bundle exec rake reissue
-      
-      - name: Build gem
-        run: |
+          # The build:checksum task will automatically run reissue:finalize first
+          # This will update the changelog and then build the gem with checksum
           bundle exec rake build:checksum
       
       - name: Create Pull Request
