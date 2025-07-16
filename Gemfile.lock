@@ -3,6 +3,7 @@ PATH
   specs:
     discharger (0.2.11)
       open3
+      prism (>= 0.19.0)
       rails (>= 7.2.1)
       rainbow
       reissue

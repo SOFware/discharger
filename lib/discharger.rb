@@ -1,5 +1,6 @@
 require "discharger/version"
 require "discharger/railtie"
+require "discharger/setup_runner"
 
 module Discharger
   class << self

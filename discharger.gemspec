@@ -13,11 +13,25 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] = "https://github.com/SOFware/discharger.git"
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
 
+  spec.post_install_message = <<~MESSAGE
+
+    Thanks for installing Discharger!
+    
+    To get started, run the generator in your Rails application:
+    
+        rails generate discharger:install
+    
+    This will create a bin/setup script and config/setup.yml file
+    to help automate your development environment setup.
+
+  MESSAGE
+
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
     Dir["{app,config,db,lib}/**/*", "LICENSE", "Rakefile", "README.md"]
   end
 
   spec.add_dependency "open3"
+  spec.add_dependency "prism", ">= 0.19.0"
   spec.add_dependency "rails", ">= 7.2.1"
   spec.add_dependency "rainbow"
   spec.add_dependency "reissue"

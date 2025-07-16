@@ -1,0 +1,60 @@
+# Discharger Setup Configuration
+# This file defines the setup process for your application
+# Customize the configuration based on your project needs
+
+# Application name
+app_name: "YourAppName"
+
+# Database configuration
+database:
+  port: 5432
+  name: "db-your-app"
+  version: "14"
+  password: "postgres"
+
+# Redis configuration (if using Redis)
+redis:
+  port: 6379
+  name: "redis-your-app"
+  version: "latest"
+
+# Built-in commands to run (empty array runs all available commands)
+# Available commands: brew, asdf, git, bundler, yarn, config, docker, env, database
+steps:
+  - brew
+  - asdf
+  - git
+  - bundler
+  - yarn
+  - config
+  - docker
+  - env
+  - database
+
+# Custom commands for application-specific setup
+custom_steps:
+  - description: "Seed application data"
+    command: "bin/rails db:seed"
+  
+  - description: "Setup application-specific configurations"
+    command: "bin/rails runner 'YourAppSetup.new.configure'"
+    condition: "defined?(YourAppSetup)"
+  
+  - description: "Import application data"
+    command: "bin/rails db:seed:import"
+    condition: "File.exist?('db/seeds/import.rb')"
+  
+  # Example: Conditional setup based on environment variable
+  # - description: "Seed legacy data"
+  #   command: "LEGACY_DATA=true bin/rails db:seed"
+  #   condition: "ENV['LEGACY_DATA'] == 'true'"
+  
+  # Example: Setup external services
+  # - description: "Setup Elasticsearch"
+  #   command: "bin/rails search:setup"
+  #   condition: "defined?(Elasticsearch)"
+  
+  # Example: Setup background job processing
+  # - description: "Setup Sidekiq"
+  #   command: "bundle exec sidekiq -d"
+  #   condition: "defined?(Sidekiq)" 
