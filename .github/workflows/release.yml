@@ -13,6 +13,8 @@ jobs:
     permissions:
       id-token: write
       contents: write
+      pull-requests: write
+      issues: write
 
     steps:
       # Set up
