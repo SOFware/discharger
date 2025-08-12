@@ -20,7 +20,7 @@ jobs:
       NOTIFY_TEST_RUN_ID: "${{ github.run_id }}"
       CC_TEST_REPORTER_ID: ${{secrets.CC_TEST_REPORTER_ID}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.version }}
@@ -47,7 +47,7 @@ jobs:
       matrix:
         version: ["3.4"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.version }}
