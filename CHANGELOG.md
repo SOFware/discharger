@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- Added fragment_directory attribute for task configuration.
+
+### Fixed
+
 - Added SetupRunner module for automated development environment setup
   - Configuration-driven setup process via YAML files
   - Built-in commands for common tasks (Brew, Bundler, environment files)
