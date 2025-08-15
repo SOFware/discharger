@@ -16,6 +16,7 @@ module Discharger
         reissue.updated_paths = task.updated_paths
         reissue.commit = task.commit
         reissue.commit_finalize = task.commit_finalize
+        reissue.fragment_directory = task.fragment_directory
       end
       task.define
       task
