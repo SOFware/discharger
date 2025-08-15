@@ -36,6 +36,7 @@ module Discharger
     attr_accessor :app_name
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
+    attr_accessor :fragment_directory
 
     attr_reader :last_message_ts
 
