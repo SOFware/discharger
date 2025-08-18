@@ -16,6 +16,7 @@ module Discharger
         reissue.updated_paths = task.updated_paths
         reissue.commit = task.commit
         reissue.commit_finalize = task.commit_finalize
+        reissue.fragment_directory = task.fragment_directory
       end
       task.define
       task
@@ -36,6 +37,7 @@ module Discharger
     attr_accessor :app_name
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
+    attr_accessor :fragment_directory
 
     attr_reader :last_message_ts
 
