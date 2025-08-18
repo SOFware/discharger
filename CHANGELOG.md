@@ -50,3 +50,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - Progress indicators that work in CI environments
   - Cleaner output for database operations (no more verbose Rails runner scripts)
   - Smart truncation of long commands in spinner messages
+  

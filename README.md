@@ -72,39 +72,80 @@ changelog.d/
 
 Each fragment file should contain the changelog entry for a specific change or feature.
 
-## Available Tasks
+## Available Tasks for Apps Using Discharger
 
-The gem creates several Rake tasks for managing your deployment workflow:
+When you add Discharger to your Rails application, it creates several Rake tasks for managing your deployment workflow. The specific tasks depend on your configuration in the Rakefile.
 
-```bash
-$ rake -T release
-rake release                            # ---------- STEP 3 ----------
-rake release:build                      # Release the current version to stage
-rake release:config                     # Echo the configuration settings
-rake release:prepare                    # ---------- STEP 1 ----------
-rake release:slack[text,channel,emoji]  # Send a message to Slack
-rake release:stage                      # ---------- STEP 2 ----------
-```
+Example tasks that Discharger adds to YOUR app:
+- `rake release:prepare` - Prepare a release (bump version, update changelog)
+- `rake release:stage` - Stage the release
+- `rake release` - Complete the release
+- `rake release:slack` - Send Slack notifications
 
-### Workflow Steps
-
-1. **Prepare** (`rake release:prepare`): Create a new branch to prepare the release, update the changelog, and bump the version
-2. **Stage** (`rake release:stage`): Update the staging branch and create a PR to production
-3. **Release** (`rake release`): Release the current version to production by tagging and pushing to the production branch
+These tasks are customized based on your `Discharger::Task.create` configuration.
 
 ## Contributing
 
 This gem is managed with [Reissue](https://github.com/SOFware/reissue).
 
-### Releasing
+### Development Rake Tasks
 
-Releases are automated via GitHub Actions:
+For developing the Discharger gem itself, the following rake tasks are available:
 
+```bash
+$ rake -T
+rake build                            # Build discharger gem into pkg/
+rake build:checksum                   # Generate SHA512 checksum
+rake install                          # Build and install gem locally
+rake install:local                    # Install without network access
+rake prepare[segment]                 # Prepare a release (defaults to patch)
+rake release[remote]                  # Create tag and push gem to RubyGems
+rake test                             # Run tests
+
+# Reissue tasks for version management
+rake reissue[segment]                 # Prepare new version (major/minor/patch)
+rake reissue:branch[branch_name]      # Create release branch
+rake reissue:finalize[date]           # Finalize changelog with release date
+rake reissue:push                     # Push branch to remote
+rake reissue:reformat[version_limit]  # Reformat changelog
+```
+
+### Releasing the Gem
+
+#### Automated Release (via GitHub Actions)
+
+The automated workflow is currently being fixed. When working:
 1. Go to Actions → "Prepare Release" → Run workflow
-2. Select version type (major, minor, patch, or custom)
-3. Review the created PR with version bumps and changelog updates
-4. Add the `approved-release` label and merge
-5. The gem will be automatically published to RubyGems.org
+2. Review the created PR
+3. Add the `approved-release` label and merge
+4. The gem will be automatically published to RubyGems.org
+
+#### Manual Release Process
+
+To release a new version manually:
+
+```bash
+# 1. Prepare the release (bumps version, finalizes changelog, builds gem)
+rake prepare         # defaults to patch
+# or specify the version segment:
+rake prepare[minor]  # for minor version bump
+rake prepare[major]  # for major version bump
+
+# 2. Review the changes
+git diff
+
+# 3. Commit the changes
+git add -A
+git commit -m "Release v$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')"
+
+# 4. Create and push a tag
+git tag -a v$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION') -m "Release v$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')"
+git push origin main --tags
+
+# 5. Release to RubyGems (requires gem credentials)
+rake release
+```
+
 
 Bug reports and pull requests are welcome on GitHub.
 
