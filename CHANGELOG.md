@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.12] - Unreleased
 
-## [0.2.11] - 2025-07-16
-
 ### Added
 
-- Added fragment_directory attribute for task configuration.
+- Added fragment directory attribute for task configuration.
+
+## [0.2.11] - 2025-07-16
 
 ### Fixed
 
