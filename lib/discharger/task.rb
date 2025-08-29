@@ -17,6 +17,7 @@ module Discharger
         reissue.commit = task.commit
         reissue.commit_finalize = task.commit_finalize
         reissue.fragment_directory = task.fragment_directory
+        reissue.clear_fragments = task.clear_fragments
       end
       task.define
       task
@@ -38,6 +39,7 @@ module Discharger
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
     attr_accessor :fragment_directory
+    attr_accessor :clear_fragments
 
     attr_reader :last_message_ts
 
@@ -55,6 +57,7 @@ module Discharger
       @staging_branch = "stage"
       @production_branch = "main"
       @description = "Release the current version to #{staging_branch}"
+      @clear_fragments = true
     end
     private attr_reader :tasker
 

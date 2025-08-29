@@ -10,6 +10,7 @@ Reissue::Task.create :reissue do |task|
   task.commit = !ENV["GITHUB_ACTIONS"]
   task.commit_finalize = !ENV["GITHUB_ACTIONS"]
   task.push_finalize = :branch
+  task.clear_fragments = true
 end
 
 Rake::TestTask.new(:test) do |t|
