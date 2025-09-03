@@ -1,3 +1,5 @@
+name: Release gem to RubyGems.org
+
 on:
   workflow_dispatch:
     inputs:
