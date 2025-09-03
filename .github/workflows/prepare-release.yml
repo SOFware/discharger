@@ -41,8 +41,9 @@ jobs:
 
       - name: Build and finalize release
         run: |
-          # The build:checksum task will automatically run reissue:finalize first
-          # This will update the changelog and then build the gem with checksum
+          # First ensure the release is finalized in changelog
+          bundle exec rake reissue:finalize
+          # Then build the gem with checksum
           bundle exec rake build:checksum
       
       - name: Create Pull Request
