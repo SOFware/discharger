@@ -54,6 +54,16 @@ jobs:
           current_version=$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')
           echo "current_version=$current_version" >> $GITHUB_OUTPUT
 
+      # Commit finalization changes
+      - name: Commit finalization changes
+        run: |
+          git add -A
+          git commit -m "Finalize version ${{ steps.current_version.outputs.current_version }} for release
+
+          🤖 Generated with [Claude Code](https://claude.ai/code)
+
+          Co-Authored-By: Claude <noreply@anthropic.com>"
+
       # Release gem using official RubyGems action
       - name: Release gem to RubyGems
         uses: rubygems/release-gem@v1
