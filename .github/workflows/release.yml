@@ -1,14 +1,20 @@
 on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      version_segment:
+        description: 'Version segment to bump (patch, minor, major)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
 
 jobs:
-  push:
-    name: Push gem to RubyGems.org
+  release:
+    name: Release gem to RubyGems.org
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'approved-release')
 
     permissions:
       id-token: write  # Required for Trusted Publishing
@@ -37,24 +43,22 @@ jobs:
         run: |
           bundle config set frozen false
 
-      # Debug OIDC token
-      - name: Debug OIDC Claims
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Workflow: $GITHUB_WORKFLOW"
-          echo "Job: $GITHUB_JOB"
-          echo "Ref: $GITHUB_REF"
-          echo "Actor: $GITHUB_ACTOR"
-
-      # Build the gem first
-      - name: Build gem
+      # Finalize changelog and build gem with checksum
+      - name: Finalize and build gem with checksum
         run: bundle exec rake build:checksum
+
+      # Get current version before release
+      - name: Get current version
+        id: current_version
+        run: |
+          current_version=$(ruby -r ./lib/discharger/version.rb -e 'puts Discharger::VERSION')
+          echo "current_version=$current_version" >> $GITHUB_OUTPUT
 
       # Release gem using official RubyGems action
       - name: Release gem to RubyGems
         uses: rubygems/release-gem@v1
 
-      # Get the new version
+      # Get the new version after automatic bump
       - name: Get new version
         id: new_version
         run: |
