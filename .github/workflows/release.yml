@@ -39,7 +39,7 @@ jobs:
 
       # Configure Trusted Publishing
       - name: Configure Trusted Publishing
-        uses: rubygems/configure-rubygems-credentials@v1
+        uses: rubygems/configure-rubygems-credentials@main
 
       # Release gem (will automatically bump version via reissue)
       - name: Release gem to RubyGems

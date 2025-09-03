@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added clean up fragment_directory task on Task.
 - Added trusted publisher flow to GitHub release action.
 
+### Fixed
+
+- Fixed version on GitHub trusted publisher action.
+
 ## [0.2.12] - 2025-08-19
 
 ### Added
