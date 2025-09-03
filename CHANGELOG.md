@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
-- Fixed version on GitHub trusted publisher action.\
+- Fixed version on GitHub trusted publisher action.
 - Added debugging for OIDC.
+- Switching back to version 1.0.0 for trusted publisher
 
 ## [0.2.12] - 2025-08-19
 

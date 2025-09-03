@@ -46,20 +46,13 @@ jobs:
           echo "Ref: $GITHUB_REF"
           echo "Actor: $GITHUB_ACTOR"
 
-      # Configure Trusted Publishing
-      - name: Configure Trusted Publishing
-        uses: rubygems/configure-rubygems-credentials@main
-        with:
-          gem-server: https://rubygems.org
+      # Build the gem first
+      - name: Build gem
+        run: bundle exec rake build:checksum
 
-      # Release gem (will automatically bump version via reissue)
+      # Release gem using official RubyGems action
       - name: Release gem to RubyGems
-        run: |
-          # The release task will:
-          # 1. Push gem to RubyGems
-          # 2. Automatically run rake reissue (with default patch segment)
-          # Since GITHUB_ACTIONS is set, reissue won't commit
-          bundle exec rake release
+        uses: rubygems/release-gem@v1
 
       # Get the new version
       - name: Get new version
