@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.14] - Unreleased
 
+### Removed
+
+- Got rid of the prepare release yml and action, only the Release gem to RubyGems.org is needed now.
+
+### Fixed
+
+- Updated release documentation.
+
 ## [0.2.13] - 2025-09-02
 
 ### Added
