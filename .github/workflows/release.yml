@@ -11,7 +11,7 @@ jobs:
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'approved-release')
 
     permissions:
-      id-token: write
+      id-token: write  # Required for Trusted Publishing
       contents: write
       pull-requests: write
       issues: write
@@ -37,6 +37,10 @@ jobs:
         run: |
           bundle config set frozen false
 
+      # Configure Trusted Publishing
+      - name: Configure Trusted Publishing
+        uses: rubygems/configure-rubygems-credentials@v1
+
       # Release gem (will automatically bump version via reissue)
       - name: Release gem to RubyGems
         run: |
@@ -45,8 +49,6 @@ jobs:
           # 2. Automatically run rake reissue (with default patch segment)
           # Since GITHUB_ACTIONS is set, reissue won't commit
           bundle exec rake release
-        env:
-          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
 
       # Get the new version
       - name: Get new version
