@@ -37,9 +37,20 @@ jobs:
         run: |
           bundle config set frozen false
 
+      # Debug OIDC token
+      - name: Debug OIDC Claims
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Workflow: $GITHUB_WORKFLOW"
+          echo "Job: $GITHUB_JOB"
+          echo "Ref: $GITHUB_REF"
+          echo "Actor: $GITHUB_ACTOR"
+
       # Configure Trusted Publishing
       - name: Configure Trusted Publishing
         uses: rubygems/configure-rubygems-credentials@main
+        with:
+          gem-server: https://rubygems.org
 
       # Release gem (will automatically bump version via reissue)
       - name: Release gem to RubyGems
