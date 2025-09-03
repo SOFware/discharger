@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
   MESSAGE
 
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
-    Dir["{app,config,db,lib}/**/*", "LICENSE", "Rakefile", "README.md"]
+    Dir["{app,config,db,lib}/**/*", "LICENSE", "Rakefile", "README.md", "CHANGELOG.md"]
   end
 
   spec.add_dependency "open3"
