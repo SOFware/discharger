@@ -170,7 +170,8 @@ module Discharger
 
         MSG
         tasker["reissue"].invoke
-
+        
+        tasker["reissue:reformat"].invoke
         new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
 
         pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
