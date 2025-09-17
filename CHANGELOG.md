@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 
 - Got rid of the prepare release yml and action, only the Release gem to RubyGems.org is needed now.
+- Got rid of the code climate action.
 
 ### Fixed
 
