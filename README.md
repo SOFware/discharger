@@ -94,13 +94,31 @@ rake release:stage                      # ---------- STEP 2 ----------
 
 ### Building with a Working Branch
 
-To release a specific working branch to stage instead of the default branch, use the `WORKING_BRANCH` environment variable:
+To release a specific working branch to stage instead of the default branch, use the `DISCHARGER_BUILD_BRANCH` environment variable:
 
 ```bash
-WORKING_BRANCH=your-feature-branch rake build
+DISCHARGER_BUILD_BRANCH=your-feature-branch rake build
 ```
 
 This will deploy your working branch to the staging environment.
+
+#### Configuring Branch Names
+
+You can configure the branch names in your Rakefile when setting up the discharger task:
+
+```ruby
+require "discharger"
+
+Discharger::Task.new do |task|
+  task.app_name = "MyApp"
+  task.working_branch = ENV.fetch("WORKING_BRANCH", "develop")
+  task.staging_branch = ENV.fetch("STAGING_BRANCH", "stage")
+  task.production_branch = ENV.fetch("PRODUCTION_BRANCH", "main")
+  # ... other configuration
+end
+```
+
+This allows you to use environment variables to override the default branch names, or set project-specific defaults. The `DISCHARGER_BUILD_BRANCH` environment variable (shown above) provides a runtime override specifically for the build task.
 
 ## Contributing
 

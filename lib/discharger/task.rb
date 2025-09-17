@@ -204,17 +204,20 @@ module Discharger
 
         desc description
         task build: :environment do
+          # Allow overriding the working branch via environment variable
+          build_branch = ENV["DISCHARGER_BUILD_BRANCH"] || working_branch
+
           syscall(
-            ["git fetch origin #{working_branch}"],
-            ["git checkout #{working_branch}"],
-            ["git reset --hard origin/#{working_branch}"],
+            ["git fetch origin #{build_branch}"],
+            ["git checkout #{build_branch}"],
+            ["git reset --hard origin/#{build_branch}"],
             ["git branch -D #{staging_branch} 2>/dev/null || true"],
             ["git checkout -b #{staging_branch}"],
             ["git push origin #{staging_branch} --force"]
           ) do
             current_version = Object.const_get(version_constant)
             tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
-            syscall ["git checkout #{working_branch}"]
+            syscall ["git checkout #{build_branch}"]
           end
         end
 
