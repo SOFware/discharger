@@ -92,16 +92,6 @@ rake release:stage                      # ---------- STEP 2 ----------
 2. **Stage** (`rake release:stage`): Update the staging branch and create a PR to production
 3. **Release** (`rake release`): Release the current version to production by tagging and pushing to the production branch
 
-### Building with a Working Branch
-
-To release a specific working branch to stage instead of the default branch, use the `WORKING_BRANCH` environment variable:
-
-```bash
-WORKING_BRANCH=your-feature-branch rake build
-```
-
-This will deploy your working branch to the staging environment.
-
 ## Contributing
 
 This gem is managed with [Reissue](https://github.com/SOFware/reissue).
