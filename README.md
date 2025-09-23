@@ -46,18 +46,18 @@ Discharger::Task.create do |task|
   task.pull_request_url = "https://github.com/SOFware/some-app"
   
   # Changelog management (optional)
-  task.fragment_directory = "changelog.d"  # Directory for changelog fragments
+  task.fragment = "changelog.d"  # Directory for changelog fragments
 end
 ```
 
 ### Changelog Fragments
 
-Discharger supports changelog fragment management through the `fragment_directory` setting. When set, Discharger will look for changelog fragments in the specified directory and automatically combine them into the main changelog during releases.
+Discharger supports changelog fragment management through the `fragment` setting from [Reissue](https://github.com/SOFware/reissue?tab=readme-ov-file#configuration-options).
 
 ```ruby
 Discharger::Task.create do |task|
   # ... other configuration ...
-  task.fragment_directory = "changelog.d"  # Default: nil (disabled)
+  task.fragment = "changelog.d"  # Default: nil (disabled), or use :git
 end
 ```
 

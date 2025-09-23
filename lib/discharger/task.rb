@@ -16,7 +16,11 @@ module Discharger
         reissue.updated_paths = task.updated_paths
         reissue.commit = task.commit
         reissue.commit_finalize = task.commit_finalize
-        reissue.fragment_directory = task.fragment_directory
+        if task.fragment_directory
+          warn "fragment_directory is deprecated, use fragment instead"
+          task.fragment = task.fragment_directory
+        end
+        reissue.fragment = task.fragment
         reissue.clear_fragments = task.clear_fragments
       end
       task.define
@@ -39,6 +43,7 @@ module Discharger
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
     attr_accessor :fragment_directory
+    attr_accessor :fragment
     attr_accessor :clear_fragments
 
     attr_reader :last_message_ts
