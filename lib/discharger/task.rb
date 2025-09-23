@@ -124,76 +124,6 @@ module Discharger
         config.token = chat_token
       end
 
-      desc <<~DESC
-        ---------- STEP 3 ----------
-        Release the current version to production
-
-        This task rebases the production branch on the staging branch and tags the
-        current version. The production branch and the tag will be pushed to the
-        remote repository.
-
-        After the release is complete, a new branch will be created to bump the
-        version for the next release.
-      DESC
-      task "#{name}": [:environment] do
-        current_version = Object.const_get(version_constant)
-        sysecho <<~MSG
-          Releasing version #{current_version} to production.
-
-          This will tag the current version and push it to the production branch.
-        MSG
-        sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-        input = $stdin.gets
-        exit if input.chomp.match?(/^x/i)
-
-        continue = syscall(
-          ["git checkout #{working_branch}"],
-          ["git branch -D #{staging_branch} 2>/dev/null || true"],
-          ["git branch -D #{production_branch} 2>/dev/null || true"],
-          ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
-          ["git checkout #{production_branch}"],
-          ["git reset --hard #{staging_branch}"],
-          ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
-          ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
-          ["git push origin v#{current_version}"]
-        ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
-          if last_message_ts.present?
-            text = File.read(Rails.root.join(changelog_file))
-            tasker["#{name}:slack"].reenable
-            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
-          end
-          syscall ["git checkout #{working_branch}"]
-        end
-
-        abort "Release failed." unless continue
-
-        sysecho <<~MSG
-          Version #{current_version} released to production.
-
-          Preparing to bump the version for the next release.
-
-        MSG
-        tasker["reissue"].invoke
-
-        new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
-
-        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
-
-        syscall(["git push origin #{new_version_branch} --force"]) do
-          sysecho <<~MSG
-            Branch #{new_version_branch} created.
-
-            Open a PR to #{working_branch} to mark the version and update the chaneglog
-            for the next release.
-
-            Opening PR: #{pr_url}
-          MSG
-        end.then do |success|
-          syscall ["open #{pr_url}"] if success
-        end
-      end
-
       namespace name do
         desc "Echo the configuration settings."
         task :config do
@@ -338,6 +268,76 @@ module Discharger
             Once the PR is **approved**, run 'rake release' to release the version.
           MSG
           syscall ["open #{pr_url}"]
+        end
+      end
+
+      desc <<~DESC
+        ---------- STEP 3 ----------
+        Release the current version to production
+
+        This task rebases the production branch on the staging branch and tags the
+        current version. The production branch and the tag will be pushed to the
+        remote repository.
+
+        After the release is complete, a new branch will be created to bump the
+        version for the next release.
+      DESC
+      task "#{name}": [:environment] do
+        current_version = Object.const_get(version_constant)
+        sysecho <<~MSG
+          Releasing version #{current_version} to production.
+
+          This will tag the current version and push it to the production branch.
+        MSG
+        sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
+        input = $stdin.gets
+        exit if input.chomp.match?(/^x/i)
+
+        continue = syscall(
+          ["git checkout #{working_branch}"],
+          ["git branch -D #{staging_branch} 2>/dev/null || true"],
+          ["git branch -D #{production_branch} 2>/dev/null || true"],
+          ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
+          ["git checkout #{production_branch}"],
+          ["git reset --hard #{staging_branch}"],
+          ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
+          ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
+          ["git push origin v#{current_version}"]
+        ) do
+          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
+          if last_message_ts.present?
+            text = File.read(Rails.root.join(changelog_file))
+            tasker["#{name}:slack"].reenable
+            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
+          end
+          syscall ["git checkout #{working_branch}"]
+        end
+
+        abort "Release failed." unless continue
+
+        sysecho <<~MSG
+          Version #{current_version} released to production.
+
+          Preparing to bump the version for the next release.
+
+        MSG
+        tasker["reissue"].invoke
+
+        new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
+
+        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
+
+        syscall(["git push origin #{new_version_branch} --force"]) do
+          sysecho <<~MSG
+            Branch #{new_version_branch} created.
+
+            Open a PR to #{working_branch} to mark the version and update the chaneglog
+            for the next release.
+
+            Opening PR: #{pr_url}
+          MSG
+        end.then do |success|
+          syscall ["open #{pr_url}"] if success
         end
       end
     end
