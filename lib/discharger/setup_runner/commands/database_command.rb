@@ -93,7 +93,7 @@ module Discharger
             end
           RUBY
 
-          with_spinner("Terminating existing database connections#{rails_env ? " (#{rails_env})" : ""}") do
+          with_spinner("Terminating existing database connections#{" (#{rails_env})" if rails_env}") do
             stdout, stderr, status = Open3.capture3(env_vars, "bin/rails", "runner", runner_script)
 
             if status.success?
