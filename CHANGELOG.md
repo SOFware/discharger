@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added clean up fragment_directory task on Task.
 - Added trusted publisher flow to GitHub release action.
 - Adding commit step if needed after the finalize.
+- Documentation about setup features and custom commands.
 
 ### Fixed
 
