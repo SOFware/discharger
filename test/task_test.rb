@@ -19,7 +19,7 @@ class DischargerTaskTest < Minitest::Test
       self.version_limit = "1.0.0"
       self.version_redo_proc = -> { "1.0.1" }
       self.changelog_file = "CHANGELOG.md"
-      self.fragment_directory = "changelog.d"
+      self.fragment = "changelog.d"
       self.updated_paths = ["lib/"]
       self.commit = "Initial commit"
       self.commit_finalize = "Finalize commit"
@@ -30,7 +30,7 @@ class DischargerTaskTest < Minitest::Test
     assert_equal "1.0.0", task.version_limit
     assert_equal "1.0.1", task.version_redo_proc.call
     assert_equal "CHANGELOG.md", task.changelog_file
-    assert_equal "changelog.d", task.fragment_directory
+    assert_equal "changelog.d", task.fragment
     assert_equal ["lib/"], task.updated_paths
     assert_equal "Initial commit", task.commit
     assert_equal "Finalize commit", task.commit_finalize

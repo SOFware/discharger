@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.14] - Unreleased
 
+### Added
+
+- Reissue deprecated fragment_directory and added fragment.
+
 ### Removed
 
 - Got rid of the prepare release yml and action, only the Release gem to RubyGems.org is needed now.
