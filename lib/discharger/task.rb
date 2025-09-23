@@ -51,7 +51,7 @@ module Discharger
     # Reissue settings
     attr_accessor(
       *Reissue::Task.instance_methods(false).reject { |method|
-        method.to_s.match?(/[\?=]\z/) || method_defined?(method)
+        method.to_s.match?(/[?=]\z/) || method_defined?(method)
       }
     )
 
