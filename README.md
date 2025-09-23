@@ -120,6 +120,149 @@ end
 
 This allows you to use environment variables to override the default branch names, or set project-specific defaults. The `DISCHARGER_BUILD_BRANCH` environment variable (shown above) provides a runtime override specifically for the build task.
 
+## Development Setup Automation
+
+Discharger includes a setup script that automates your development environment configuration. When you run the install generator, it creates a `bin/setup` script and a `config/setup.yml` configuration file.
+
+### Running Setup
+
+After installing Discharger, run the setup script to configure your development environment:
+
+```bash
+$ bin/setup
+```
+
+This script is idempotent - you can run it multiple times safely, and it will ensure your environment is properly configured.
+
+### Configuration
+
+The setup process is configured through `config/setup.yml`. Here's an example configuration:
+
+```yaml
+app_name: "YourAppName"
+
+database:
+  port: 5432
+  name: "db-your-app"
+  version: "14"
+  password: "postgres"
+
+redis:
+  port: 6379
+  name: "redis-your-app"
+  version: "latest"
+
+# Built-in commands to run
+steps:
+  - brew
+  - asdf
+  - git
+  - bundler
+  - yarn
+  - config
+  - docker
+  - env
+  - database
+
+# Custom commands for your application
+custom_steps:
+  - description: "Seed application data"
+    command: "bin/rails db:seed"
+```
+
+### Using Default Steps
+
+The `steps` array specifies which built-in setup commands to run. Available commands include:
+
+- `brew` - Install Homebrew dependencies
+- `asdf` - Setup version management with asdf
+- `git` - Configure git settings
+- `bundler` - Install Ruby gems
+- `yarn` - Install JavaScript packages
+- `config` - Copy configuration files
+- `docker` - Setup Docker containers
+- `env` - Configure environment variables
+- `database` - Setup and migrate database
+
+### Selecting Specific Steps
+
+You can customize which steps run by modifying the `steps` array:
+
+```yaml
+# Only run specific setup steps
+steps:
+  - bundler
+  - database
+  - yarn
+```
+
+Leave the array empty or omit it entirely to run all available steps.
+
+### Adding Custom Commands
+
+Add application-specific setup tasks using the `custom_steps` section:
+
+```yaml
+custom_steps:
+  # Simple command
+  - description: "Compile assets"
+    command: "bin/rails assets:precompile"
+
+  # Command with condition
+  - description: "Setup Elasticsearch"
+    command: "bin/rails search:setup"
+    condition: "defined?(Elasticsearch)"
+
+  # Command with environment variable condition
+  - description: "Import production data"
+    command: "bin/rails db:import"
+    condition: "ENV['IMPORT_DATA'] == 'true'"
+```
+
+Each custom step can include:
+- `description` - A description shown during setup
+- `command` - The command to execute
+- `condition` - An optional Ruby expression that must evaluate to true for the command to run
+
+### Creating Custom Command Classes
+
+For more complex setup logic, you can create custom command classes that integrate with Discharger's setup system:
+
+```ruby
+# lib/setup_commands/elasticsearch_command.rb
+class ElasticsearchCommand < Discharger::SetupRunner::Commands::BaseCommand
+  def description
+    "Configure Elasticsearch"
+  end
+
+  def can_execute?
+    defined?(Elasticsearch)
+  end
+
+  def execute
+    with_spinner("Setting up Elasticsearch...") do
+      # Your setup logic here
+      system("bin/rails search:setup")
+      system("bin/rails search:reindex")
+    end
+    log "Elasticsearch configured successfully", emoji: "✅"
+  end
+end
+
+# Register the command in an initializer or your setup script
+Discharger::SetupRunner.register_command(:elasticsearch, ElasticsearchCommand)
+```
+
+Then use it in your configuration:
+
+```yaml
+steps:
+  - bundler
+  - database
+  - elasticsearch  # Your custom command
+```
+
+
 ## Contributing
 
 This gem is managed with [Reissue](https://github.com/SOFware/reissue).
