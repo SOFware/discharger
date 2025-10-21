@@ -50,18 +50,35 @@ Discharger::Task.create do |task|
 end
 ```
 
-### Changelog Fragments
+### Changelog Management
 
-Discharger supports changelog fragment management through the `fragment` setting from [Reissue](https://github.com/SOFware/reissue?tab=readme-ov-file#configuration-options).
+Discharger supports changelog management through the `fragment` setting from [Reissue](https://github.com/SOFware/reissue?tab=readme-ov-file#configuration-options).
+
+#### Git Commit Trailers
+
+Document changes directly in your commit messages using git trailers. Set `task.fragment = :git` to enable this feature:
 
 ```ruby
 Discharger::Task.create do |task|
   # ... other configuration ...
-  task.fragment = "changelog.d"  # Default: nil (disabled), or use :git
+  task.fragment = :git  # Enable git commit trailers
 end
 ```
 
-With fragments enabled, you can create individual changelog files in the `changelog.d/` directory:
+This keeps changelog data coupled with your code changes in the same commit. See [Git Trailers Guide](docs/git-trailers-guide.md) for detailed usage instructions.
+
+#### File-Based Fragments
+
+Alternatively, you can use file-based fragments by creating individual changelog files in a directory:
+
+```ruby
+Discharger::Task.create do |task|
+  # ... other configuration ...
+  task.fragment = "changelog.d"  # Enable file-based fragments
+end
+```
+
+With this approach, create individual changelog files in the `changelog.d/` directory:
 
 ```
 changelog.d/
