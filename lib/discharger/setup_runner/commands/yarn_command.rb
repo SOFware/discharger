@@ -13,7 +13,27 @@ module Discharger
           if File.exist?(File.join(app_root, "yarn.lock"))
             if system_quiet("which corepack")
               system! "corepack enable"
-              system! "corepack use yarn@stable"
+
+              package_json_path = File.join(app_root, "package.json")
+              if File.exist?(package_json_path)
+                begin
+                  require "json"
+                  package_json = JSON.parse(File.read(package_json_path))
+
+                  if package_json["packageManager"]&.start_with?("yarn@")
+                    yarn_spec = package_json["packageManager"].split("+").first
+                    log "Using #{yarn_spec} from package.json"
+                    system! "corepack use #{yarn_spec}"
+                  else
+                    system! "corepack use yarn@stable"
+                  end
+                rescue JSON::ParserError => e
+                  log "Warning: Could not parse package.json: #{e.message}"
+                  system! "corepack use yarn@stable"
+                end
+              else
+                system! "corepack use yarn@stable"
+              end
             end
 
             # Install dependencies
