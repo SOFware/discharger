@@ -19,54 +19,49 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "can_execute? returns false when docker is not installed" do
-    @command.define_singleton_method(:system_quiet) do |cmd|
-      !(cmd == "which docker")
-    end
+    @command.define_singleton_method(:docker_available?) { false }
 
     refute @command.can_execute?
   end
 
   test "can_execute? returns false when no containers are configured" do
-    @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker"
-    end
+    @command.define_singleton_method(:docker_available?) { true }
 
     refute @command.can_execute?
   end
 
   test "can_execute? returns true when docker exists and database is configured" do
     @config.database = OpenStruct.new(name: "db-test")
-
-    @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker"
-    end
+    @command.define_singleton_method(:docker_available?) { true }
 
     assert @command.can_execute?
   end
 
   test "can_execute? returns true when docker exists and redis is configured" do
     @config.redis = OpenStruct.new(name: "redis-test")
-
-    @command.define_singleton_method(:system_quiet) do |cmd|
-      cmd == "which docker"
-    end
+    @command.define_singleton_method(:docker_available?) { true }
 
     assert @command.can_execute?
   end
 
-  test "execute starts Docker if not running" do
+  test "execute starts Docker if not running and no native PostgreSQL" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14")
 
     docker_started = false
     container_created = false
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+
+    @command.define_singleton_method(:docker_running?) do
+      docker_started
+    end
+
+    @command.define_singleton_method(:start_docker_for_platform) do
+      docker_started = true
+    end
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        docker_started
-      when "open -a Docker"
-        docker_started = true
-        true
       when /docker ps.*db-test/
         container_created
       when /docker inspect db-test/
@@ -89,6 +84,32 @@ class DockerCommandTest < ActiveSupport::TestCase
     assert container_created
   end
 
+  test "execute skips Docker when native PostgreSQL is available" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14")
+
+    docker_checked = false
+    container_created = false
+
+    @command.define_singleton_method(:native_postgresql_available?) { true }
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+
+    @command.define_singleton_method(:docker_running?) do
+      docker_checked = true
+      false
+    end
+
+    @command.define_singleton_method(:system!) do |*args|
+      cmd = args.join(" ")
+      container_created = true if cmd.include?("docker run")
+    end
+
+    @command.execute
+
+    refute docker_checked, "Should not check Docker when native PostgreSQL is available"
+    refute container_created, "Should not create container when native PostgreSQL is available"
+    assert_equal "5432", ENV["DB_PORT"]
+  end
+
   test "execute creates database container with correct parameters" do
     @config.database = OpenStruct.new(
       name: "db-test",
@@ -99,12 +120,12 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     commands_run = []
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*db-test/
-        # First check returns false (not running), second check returns true (after creation)
         commands_run.any? { |c| c.include?("docker run") }
       when /docker inspect db-test/
         false
@@ -139,12 +160,11 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     commands_run = []
 
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*redis-test/
-        # First check returns false (not running), second check returns true (after creation)
         commands_run.any? { |c| c.include?("docker run") }
       when /docker inspect redis-test/
         false
@@ -173,15 +193,15 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     commands_run = []
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*db-test/
-        # First check returns false (not running), second check returns true (after start)
         commands_run.include?("docker start db-test")
       when /docker inspect db-test/
-        true # Container exists
+        true
       when /docker start db-test/
         commands_run << cmd
         true
@@ -202,16 +222,17 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     commands_run = []
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*db-test/
         commands_run.include?("docker run -d --name db-test -p 5432:5432 -e POSTGRES_PASSWORD=postgres -v db-test:/var/lib/postgresql/data postgres:14")
       when /docker inspect db-test/
-        true # Container exists
+        true
       when /docker start db-test/
-        false # Start fails
+        false
       when /docker rm -f db-test/
         commands_run << cmd
         true
@@ -237,6 +258,8 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     commands_run = []
 
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       true
     end
@@ -253,12 +276,13 @@ class DockerCommandTest < ActiveSupport::TestCase
   test "execute raises error if container fails to start" do
     @config.database = OpenStruct.new(name: "db-test", port: 5432)
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
-      when "docker info > /dev/null 2>&1"
-        true
       when /docker ps.*db-test/
-        false # Never reports as running
+        false
       when /docker inspect db-test/
         false
       else
