@@ -30,7 +30,7 @@ jobs:
         run: |
           git config --global user.email "gems@sofwarellc.com"
           git config --global user.name "SOFware"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
