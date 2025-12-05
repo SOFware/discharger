@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    discharger (0.2.19)
+    discharger (0.2.20)
       open3
       prism (>= 0.19.0)
       rails (>= 7.2.1)
