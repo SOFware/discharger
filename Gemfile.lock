@@ -218,7 +218,7 @@ GEM
       psych (>= 4.0.0)
       tsort
     regexp_parser (2.11.3)
-    reissue (0.4.6)
+    reissue (0.4.7)
       rake
     reline (0.6.3)
       io-console (~> 0.5)
