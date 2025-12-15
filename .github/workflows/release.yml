@@ -80,7 +80,7 @@ jobs:
 
       # Create PR for next version
       - name: Create Pull Request for next version
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: bump-version-${{ steps.new_version.outputs.new_version }}
