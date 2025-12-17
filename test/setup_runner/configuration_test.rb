@@ -9,8 +9,8 @@ class ConfigurationTest < ActiveSupport::TestCase
     config = Discharger::SetupRunner::Configuration.new
 
     assert_equal "Application", config.app_name
-    assert_instance_of Discharger::SetupRunner::DatabaseConfig, config.db_config
-    assert_instance_of Discharger::SetupRunner::RedisConfig, config.redis_config
+    assert_instance_of Discharger::SetupRunner::DatabaseConfig, config.database
+    assert_instance_of Discharger::SetupRunner::RedisConfig, config.redis
     assert_equal [], config.services
     assert_equal [], config.steps
     assert_equal [], config.custom_steps
@@ -44,13 +44,13 @@ class ConfigurationTest < ActiveSupport::TestCase
     config = Discharger::SetupRunner::Configuration.from_file("test_config.yml")
 
     assert_equal "MyTestApp", config.app_name
-    assert_equal 5433, config.db_config.port
-    assert_equal "my-db", config.db_config.name
-    assert_equal "15", config.db_config.version
-    assert_equal "secret", config.db_config.password
-    assert_equal 6380, config.redis_config.port
-    assert_equal "my-redis", config.redis_config.name
-    assert_equal "7.0", config.redis_config.version
+    assert_equal 5433, config.database.port
+    assert_equal "my-db", config.database.name
+    assert_equal "15", config.database.version
+    assert_equal "secret", config.database.password
+    assert_equal 6380, config.redis.port
+    assert_equal "my-redis", config.redis.name
+    assert_equal "7.0", config.redis.version
     assert_equal ["elasticsearch", "rabbitmq"], config.services
     assert_equal ["brew", "bundler"], config.steps
     assert_equal [{"name" => "custom_task", "command" => "echo \"custom\""}], config.custom_steps
@@ -68,11 +68,11 @@ class ConfigurationTest < ActiveSupport::TestCase
     config = Discharger::SetupRunner::Configuration.from_file("partial_config.yml")
 
     assert_equal "PartialApp", config.app_name
-    assert_equal 5434, config.db_config.port
+    assert_equal 5434, config.database.port
     # Check defaults are preserved
-    assert_equal "db-app", config.db_config.name
-    assert_equal "14", config.db_config.version
-    assert_equal 6379, config.redis_config.port
+    assert_equal "db-app", config.database.name
+    assert_equal "14", config.database.version
+    assert_equal 6379, config.redis.port
   end
 
   test "handles empty YAML file" do
@@ -82,8 +82,8 @@ class ConfigurationTest < ActiveSupport::TestCase
 
     # Should use all defaults
     assert_equal "Application", config.app_name
-    assert_equal 5432, config.db_config.port
-    assert_equal 6379, config.redis_config.port
+    assert_equal 5432, config.database.port
+    assert_equal 6379, config.redis.port
   end
 
   test "raises error for non-existent file" do

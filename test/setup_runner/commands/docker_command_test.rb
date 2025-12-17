@@ -1,6 +1,7 @@
 require "test_helper"
 require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/docker_command"
+require "discharger/setup_runner/configuration"
 require "logger"
 require "ostruct"
 
@@ -42,6 +43,22 @@ class DockerCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:docker_available?) { true }
 
     assert @command.can_execute?
+  end
+
+  test "can_execute? returns true with real Configuration class when database is configured" do
+    config = Discharger::SetupRunner::Configuration.new
+    command = Discharger::SetupRunner::Commands::DockerCommand.new(config, @test_dir, @logger)
+    command.define_singleton_method(:docker_available?) { true }
+
+    assert command.can_execute?, "DockerCommand should recognize Configuration#database method"
+  end
+
+  test "can_execute? returns true with real Configuration class when redis is configured" do
+    config = Discharger::SetupRunner::Configuration.new
+    command = Discharger::SetupRunner::Commands::DockerCommand.new(config, @test_dir, @logger)
+    command.define_singleton_method(:docker_available?) { true }
+
+    assert command.can_execute?, "DockerCommand should recognize Configuration#redis method"
   end
 
   test "execute starts Docker if not running and no native PostgreSQL" do
