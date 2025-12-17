@@ -11,3 +11,4 @@
 /test/dummy/tmp/
 /test/tmp/
 coverage
+.claude/settings.local.json
