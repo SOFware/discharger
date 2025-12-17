@@ -5,12 +5,12 @@ require "yaml"
 module Discharger
   module SetupRunner
     class Configuration
-      attr_accessor :app_name, :db_config, :redis_config, :services, :steps, :custom_steps
+      attr_accessor :app_name, :database, :redis, :services, :steps, :custom_steps
 
       def initialize
         @app_name = "Application"
-        @db_config = DatabaseConfig.new
-        @redis_config = RedisConfig.new
+        @database = DatabaseConfig.new
+        @redis = RedisConfig.new
         @services = []
         @steps = []
         @custom_steps = []
@@ -24,8 +24,8 @@ module Discharger
         return config if yaml.nil? || yaml == false
 
         config.app_name = yaml["app_name"] if yaml["app_name"]
-        config.db_config.from_hash(yaml["database"]) if yaml["database"]
-        config.redis_config.from_hash(yaml["redis"]) if yaml["redis"]
+        config.database.from_hash(yaml["database"]) if yaml["database"]
+        config.redis.from_hash(yaml["redis"]) if yaml["redis"]
         config.services = yaml["services"] || []
         config.steps = yaml["steps"] || []
         config.custom_steps = yaml["custom_steps"] || []
