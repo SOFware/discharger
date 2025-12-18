@@ -156,7 +156,12 @@ module Discharger
 
         def system_quiet(*args)
           require "open3"
-          stdout, _stderr, status = Open3.capture3(*args)
+          # If it's a single string with shell metacharacters, run it through bash
+          if args.size == 1 && args.first.is_a?(String) && args.first.match?(/[|><&;]/)
+            stdout, _stderr, status = Open3.capture3("bash", "-c", args.first)
+          else
+            stdout, _stderr, status = Open3.capture3(*args)
+          end
           logger&.debug("Quietly executed #{args.join(" ")} - success: #{status.success?}")
           logger&.debug("Output: #{stdout}") if stdout && !stdout.empty? && logger
           status.success?
@@ -172,10 +177,20 @@ module Discharger
         end
 
         def proceed_with(task)
-          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
+          # Auto-proceed in non-interactive environments (unless forced interactive for testing)
+          unless ENV["DISCHARGER_FORCE_INTERACTIVE"]
+            if ENV["CI"] || !$stdin.tty? || ENV["QUIET_SETUP"]
+              yield
+              return
+            end
+          end
+
+          unless ENV["DISABLE_OUTPUT"]
             puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
           end
-          if gets.chomp == "Y"
+
+          input = gets
+          if input&.chomp == "Y"
             yield
           end
         end

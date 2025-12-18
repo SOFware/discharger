@@ -8,29 +8,31 @@ module Discharger
       class DockerCommand < BaseCommand
         def execute
           # Setup database container if configured
-          if config.respond_to?(:database) && config.database
+          if database_configured?
+            puts "  → Checking database configuration..." unless ENV["QUIET_SETUP"]
             if native_postgresql_available?
-              log "Native PostgreSQL detected on port #{native_postgresql_port}, skipping Docker container setup"
+              puts "  → Native PostgreSQL detected on port #{native_postgresql_port}, skipping Docker setup" unless ENV["QUIET_SETUP"]
               ENV["DB_PORT"] ||= native_postgresql_port.to_s
             else
+              puts "  → No native PostgreSQL found, setting up Docker container..." unless ENV["QUIET_SETUP"]
               ensure_docker_running
               setup_container(
-                name: config.database.name || "db-app",
-                port: config.database.port || 5432,
-                image: "postgres:#{config.database.version || "14"}",
-                env: {"POSTGRES_PASSWORD" => config.database.password || "postgres"},
-                volume: "#{config.database.name || "db-app"}:/var/lib/postgresql/data",
+                name: database_config.name || "db-app",
+                port: database_config.port || 5432,
+                image: "postgres:#{database_config.version || "14"}",
+                env: {"POSTGRES_PASSWORD" => database_config.password || "postgres"},
+                volume: "#{database_config.name || "db-app"}:/var/lib/postgresql/data",
                 internal_port: 5432
               )
             end
           end
 
           # Setup Redis container if configured
-          if config.respond_to?(:redis) && config.redis
+          if redis_configured?
             setup_container(
-              name: config.redis.name || "redis-app",
-              port: config.redis.port || 6379,
-              image: "redis:#{config.redis.version || "latest"}",
+              name: redis_config.name || "redis-app",
+              port: redis_config.port || 6379,
+              image: "redis:#{redis_config.version || "latest"}",
               internal_port: 6379
             )
           end
@@ -38,10 +40,7 @@ module Discharger
 
         def can_execute?
           # Only execute if Docker is available and containers are configured
-          docker_available? && (
-            (config.respond_to?(:database) && config.database) ||
-            (config.respond_to?(:redis) && config.redis)
-          )
+          docker_available? && (database_configured? || redis_configured?)
         end
 
         def description
@@ -134,8 +133,36 @@ module Discharger
           true
         end
 
+        def database_configured?
+          config.database&.name
+        end
+
+        def redis_configured?
+          config.redis&.name
+        end
+
+        def database_config
+          config.database
+        end
+
+        def redis_config
+          config.redis
+        end
+
         def native_postgresql_available?
-          # Check common PostgreSQL ports
+          # If a specific port is configured, ONLY check that port
+          # We should not use a native PostgreSQL on a different port
+          configured_port = config.database&.port
+          if configured_port
+            if postgresql_running_on_port?(configured_port)
+              @native_pg_port = configured_port
+              return true
+            end
+            # Configured port specified but PostgreSQL not running on it
+            return false
+          end
+
+          # No specific port configured, check common PostgreSQL ports
           [5432, 5433].each do |port|
             if postgresql_running_on_port?(port)
               @native_pg_port = port
