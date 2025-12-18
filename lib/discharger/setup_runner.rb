@@ -5,6 +5,7 @@ require_relative "setup_runner/configuration"
 require_relative "setup_runner/command_registry"
 require_relative "setup_runner/command_factory"
 require_relative "setup_runner/runner"
+require_relative "setup_runner/prerequisites_loader"
 
 module Discharger
   module SetupRunner

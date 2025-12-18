@@ -59,8 +59,10 @@ class BrewCommandTest < ActiveSupport::TestCase
     end
 
     with_tty_stdin do
-      capture_output do
-        @command.execute
+      with_output_enabled do
+        capture_output do
+          @command.execute
+        end
       end
     end
 

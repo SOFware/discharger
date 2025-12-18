@@ -11,17 +11,18 @@ module Discharger
           # Drop and recreate development database
           terminate_database_connections
           with_spinner("Dropping and recreating development database") do
-            _stdout, stderr, status = Open3.capture3("bash", "-c", "bin/rails db:drop db:create > /dev/null 2>&1")
+            stdout, stderr, status = Open3.capture3(db_env, "bin/rails", "db:drop", "db:create")
             if status.success?
               {success: true}
             else
-              {success: false, error: "Failed to drop/create database: #{stderr}"}
+              error_msg = stderr.empty? ? stdout : stderr
+              {success: false, error: "Failed to drop/create database: #{error_msg}"}
             end
           end
 
           # Load schema and run migrations
           with_spinner("Loading database schema and running migrations") do
-            _stdout, stderr, status = Open3.capture3("bin/rails db:schema:load db:migrate")
+            _stdout, stderr, status = Open3.capture3(db_env, "bin/rails", "db:schema:load", "db:migrate")
             if status.success?
               {success: true}
             else
@@ -30,9 +31,9 @@ module Discharger
           end
 
           # Seed the database
-          env = (config.respond_to?(:seed_env) && config.seed_env) ? {"SEED_DEV_ENV" => "true"} : {}
+          seed_env = db_env.merge((config.respond_to?(:seed_env) && config.seed_env) ? {"SEED_DEV_ENV" => "true"} : {})
           with_spinner("Seeding the database") do
-            _stdout, stderr, status = Open3.capture3(env, "bin/rails db:seed")
+            _stdout, stderr, status = Open3.capture3(seed_env, "bin/rails", "db:seed")
             if status.success?
               {success: true}
             else
@@ -43,11 +44,13 @@ module Discharger
           # Setup test database
           terminate_database_connections("test")
           with_spinner("Setting up test database") do
-            _stdout, stderr, status = Open3.capture3({"RAILS_ENV" => "test"}, "bash", "-c", "bin/rails db:drop db:create db:schema:load > /dev/null 2>&1")
+            test_env = db_env.merge({"RAILS_ENV" => "test"})
+            stdout, stderr, status = Open3.capture3(test_env, "bin/rails", "db:drop", "db:create", "db:schema:load")
             if status.success?
               {success: true}
             else
-              {success: false, error: "Failed to setup test database: #{stderr}"}
+              error_msg = stderr.empty? ? stdout : stderr
+              {success: false, error: "Failed to setup test database: #{error_msg}"}
             end
           end
 
@@ -71,6 +74,17 @@ module Discharger
         end
 
         private
+
+        def db_env
+          # Use Docker PostgreSQL tools if bin/docker-pg directory exists
+          docker_pg_path = File.join(app_root, "bin", "docker-pg")
+          if File.directory?(docker_pg_path)
+            # Prepend docker-pg directory to PATH to use Docker's pg_dump/psql
+            {"PATH" => "#{docker_pg_path}:#{ENV["PATH"]}"}
+          else
+            {}
+          end
+        end
 
         def terminate_database_connections(rails_env = nil)
           # Use a Rails runner to terminate connections within the Rails context
