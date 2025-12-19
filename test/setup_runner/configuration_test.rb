@@ -14,6 +14,7 @@ class ConfigurationTest < ActiveSupport::TestCase
     assert_equal [], config.services
     assert_equal [], config.steps
     assert_equal [], config.custom_steps
+    assert_equal [], config.pre_steps
   end
 
   test "loads from YAML file" do
@@ -37,6 +38,9 @@ class ConfigurationTest < ActiveSupport::TestCase
       custom_steps:
         - name: custom_task
           command: echo "custom"
+      pre_steps:
+        - homebrew
+        - postgresql_tools
     YAML
 
     create_file("test_config.yml", yaml_content)
@@ -54,6 +58,7 @@ class ConfigurationTest < ActiveSupport::TestCase
     assert_equal ["elasticsearch", "rabbitmq"], config.services
     assert_equal ["brew", "bundler"], config.steps
     assert_equal [{"name" => "custom_task", "command" => "echo \"custom\""}], config.custom_steps
+    assert_equal ["homebrew", "postgresql_tools"], config.pre_steps
   end
 
   test "loads partial configuration from file" do

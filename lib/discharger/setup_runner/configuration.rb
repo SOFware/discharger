@@ -5,7 +5,7 @@ require "yaml"
 module Discharger
   module SetupRunner
     class Configuration
-      attr_accessor :app_name, :database, :redis, :services, :steps, :custom_steps
+      attr_accessor :app_name, :database, :redis, :services, :steps, :custom_steps, :pre_steps
 
       def initialize
         @app_name = "Application"
@@ -14,6 +14,7 @@ module Discharger
         @services = []
         @steps = []
         @custom_steps = []
+        @pre_steps = []
       end
 
       def self.from_file(path)
@@ -29,6 +30,7 @@ module Discharger
         config.services = yaml["services"] || []
         config.steps = yaml["steps"] || []
         config.custom_steps = yaml["custom_steps"] || []
+        config.pre_steps = yaml["pre_steps"] || []
 
         config
       end

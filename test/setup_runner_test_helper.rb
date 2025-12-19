@@ -92,9 +92,16 @@ module SetupRunnerTestHelper
   def with_output_enabled(&block)
     # Temporarily enable output for tests that need to capture it
     original_quiet = ENV["QUIET_SETUP"]
+    original_force_interactive = ENV["DISCHARGER_FORCE_INTERACTIVE"]
     ENV.delete("QUIET_SETUP")
+    ENV["DISCHARGER_FORCE_INTERACTIVE"] = "1"
     yield
   ensure
     ENV["QUIET_SETUP"] = original_quiet if original_quiet
+    if original_force_interactive
+      ENV["DISCHARGER_FORCE_INTERACTIVE"] = original_force_interactive
+    else
+      ENV.delete("DISCHARGER_FORCE_INTERACTIVE")
+    end
   end
 end

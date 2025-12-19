@@ -1,9 +1,7 @@
 # Configure Rails Environment
 ENV["RAILS_ENV"] = "test"
 
-if ENV["CI"]
-  require "simplecov"
-end
+require "simplecov"
 
 require_relative "../test/dummy/config/environment"
 ActiveRecord::Migrator.migrations_paths = [File.expand_path("../test/dummy/db/migrate", __dir__)]
