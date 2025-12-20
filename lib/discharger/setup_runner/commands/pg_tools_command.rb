@@ -40,6 +40,76 @@ module Discharger
         end
 
         def wrapper_content(tool)
+          if tool == "pg_dump"
+            pg_dump_wrapper_content
+          else
+            generic_wrapper_content(tool)
+          end
+        end
+
+        def pg_dump_wrapper_content
+          <<~BASH
+            #!/usr/bin/env bash
+            set -e
+
+            CONTAINER="#{container_name}"
+
+            # Docker first: use container's pg_dump if running
+            if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER}$"; then
+              echo "Using pg_dump from Docker container: $CONTAINER" >&2
+
+              # Parse arguments to handle --file option specially
+              # When running in Docker, we need to output to stdout and redirect locally
+              OUTPUT_FILE=""
+              HAS_USER=""
+              ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case $1 in
+                  --file)
+                    OUTPUT_FILE="$2"
+                    shift 2
+                    ;;
+                  --file=*)
+                    OUTPUT_FILE="${1#*=}"
+                    shift
+                    ;;
+                  -f)
+                    OUTPUT_FILE="$2"
+                    shift 2
+                    ;;
+                  -U|--username|--username=*)
+                    HAS_USER="1"
+                    ARGS+=("$1")
+                    shift
+                    ;;
+                  *)
+                    ARGS+=("$1")
+                    shift
+                    ;;
+                esac
+              done
+
+              # Default to postgres user if not specified (container runs as root)
+              if [[ -z "$HAS_USER" ]]; then
+                ARGS=("-U" "postgres" "${ARGS[@]}")
+              fi
+
+              if [[ -n "$OUTPUT_FILE" ]]; then
+                # Run pg_dump in container, output to stdout, redirect to local file
+                docker exec -i "$CONTAINER" pg_dump "${ARGS[@]}" > "$OUTPUT_FILE"
+              else
+                # No file output, just exec normally
+                exec docker exec -i "$CONTAINER" pg_dump "${ARGS[@]}"
+              fi
+              exit 0
+            fi
+
+            # Fallback to system pg_dump
+            exec pg_dump "$@"
+          BASH
+        end
+
+        def generic_wrapper_content(tool)
           <<~BASH
             #!/usr/bin/env bash
             set -e
