@@ -19,7 +19,7 @@ redis:
   version: "latest"
 
 # Built-in commands to run (empty array runs all available commands)
-# Available commands: brew, asdf, git, bundler, yarn, config, docker, env, database
+# Available commands: brew, asdf, git, bundler, yarn, config, docker, pg_tools, env, database
 steps:
   - brew
   - asdf
@@ -28,6 +28,7 @@ steps:
   - yarn
   - config
   - docker
+  - pg_tools
   - env
   - database
 
