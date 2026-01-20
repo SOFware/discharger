@@ -70,11 +70,28 @@ module Discharger
             create_container(name: name, port: port, image: image, env: env, volume: volume, internal_port: internal_port)
           end
 
-          # Verify container is running
-          sleep 2
-          unless system_quiet("docker ps | grep #{name} > /dev/null 2>&1")
-            log "#{name} container failed to start"
-            raise "#{name} container failed to start"
+          wait_for_container_running(name)
+        end
+
+        def wait_for_container_running(name, timeout: 30)
+          require "open3"
+          start_time = Time.now
+          loop do
+            return true if system_quiet("docker ps | grep #{name} > /dev/null 2>&1")
+
+            status, = Open3.capture3("docker", "inspect", "-f", "{{.State.Status}}", name)
+            status = status.strip
+            if status == "exited"
+              exit_code, = Open3.capture3("docker", "inspect", "-f", "{{.State.ExitCode}}", name)
+              logs, = Open3.capture3("docker", "logs", "--tail", "20", name)
+              raise "#{name} container exited with code #{exit_code.strip}:\n#{logs}"
+            end
+
+            if Time.now - start_time > timeout
+              raise "#{name} container failed to start within #{timeout} seconds (current status: #{status})"
+            end
+
+            sleep 1
           end
         end
 
