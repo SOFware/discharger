@@ -75,4 +75,21 @@ class DischargerTaskTest < Minitest::Test
       "release:stage"
     ], Rake::Task.tasks.map(&:name).grep(/^release/).sort
   end
+
+  def test_validate_version_match_passes_when_versions_match
+    @task.version_file = "config/application.rb"
+    @task.define_singleton_method(:git_show_version) { |_| "2026.1.A" }
+
+    output = StringIO.new
+    assert @task.validate_version_match!("stage", "develop", output:)
+    assert_match(/Versions match/, output.string)
+  end
+
+  def test_validate_version_match_aborts_when_versions_differ
+    @task.version_file = "config/application.rb"
+    @task.define_singleton_method(:git_show_version) { |branch| (branch == "stage") ? "2025.10.A" : "2026.1.A" }
+
+    error = assert_raises(SystemExit) { capture_io { @task.validate_version_match!("stage", "develop") } }
+    assert_equal 1, error.status
+  end
 end
