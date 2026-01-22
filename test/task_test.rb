@@ -11,6 +11,7 @@ class DischargerTaskTest < Minitest::Test
     assert_equal "stage", @task.staging_branch
     assert_equal "main", @task.production_branch
     assert_equal "Release the current version to stage", @task.description
+    assert_equal false, @task.auto_deploy_staging
   end
 
   def test_create
@@ -76,20 +77,62 @@ class DischargerTaskTest < Minitest::Test
     ], Rake::Task.tasks.map(&:name).grep(/^release/).sort
   end
 
-  def test_validate_version_match_passes_when_versions_match
-    @task.version_file = "config/application.rb"
-    @task.define_singleton_method(:git_show_version) { |_| "2026.1.A" }
+  def test_validate_version_match_success
+    @task.version_file = "VERSION"
+
+    # Stub git_show_version to return matching versions
+    @task.define_singleton_method(:git_show_version) { |_branch| "2026.1.A" }
 
     output = StringIO.new
-    assert @task.validate_version_match!("stage", "develop", output:)
+    result = @task.validate_version_match!("stage", "develop", output:)
+
+    assert result
     assert_match(/Versions match/, output.string)
   end
 
-  def test_validate_version_match_aborts_when_versions_differ
-    @task.version_file = "config/application.rb"
-    @task.define_singleton_method(:git_show_version) { |branch| (branch == "stage") ? "2025.10.A" : "2026.1.A" }
+  def test_validate_version_match_failure
+    @task.version_file = "VERSION"
 
-    error = assert_raises(SystemExit) { capture_io { @task.validate_version_match!("stage", "develop") } }
-    assert_equal 1, error.status
+    # Stub git_show_version to return different versions
+    @task.define_singleton_method(:git_show_version) do |branch|
+      (branch == "stage") ? "2026.1.A" : "2026.1.B"
+    end
+
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_version_match!("stage", "develop") }
+    end
+  end
+
+  def test_validate_release_commit_success
+    sha = "abc123def456"
+
+    # Stub both methods to return same SHA
+    @task.define_singleton_method(:git_local_sha) { |_branch| sha }
+    @task.define_singleton_method(:git_version_file_commit) { |_branch| sha }
+
+    output = StringIO.new
+    result = @task.validate_release_commit!("develop", output:)
+
+    assert result
+    assert_match(/HEAD is the release commit/, output.string)
+  end
+
+  def test_validate_release_commit_failure
+    head_sha = "abc123def456"
+    release_sha = "xyz789ghi012"
+
+    # Stub to return different SHAs
+    @task.define_singleton_method(:git_local_sha) { |_branch| head_sha }
+    @task.define_singleton_method(:git_version_file_commit) { |_branch| release_sha }
+    @task.version_file = "VERSION"
+
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_release_commit!("develop") }
+    end
+  end
+
+  def test_auto_deploy_staging_can_be_enabled
+    @task.auto_deploy_staging = true
+    assert_equal true, @task.auto_deploy_staging
   end
 end

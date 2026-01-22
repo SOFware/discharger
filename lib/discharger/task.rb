@@ -35,6 +35,7 @@ module Discharger
     attr_accessor :working_branch
     attr_accessor :staging_branch
     attr_accessor :production_branch
+    attr_accessor :auto_deploy_staging
 
     attr_accessor :release_message_channel
     attr_accessor :version_constant
@@ -64,6 +65,7 @@ module Discharger
       @production_branch = "main"
       @description = "Release the current version to #{staging_branch}"
       @clear_fragments = true
+      @auto_deploy_staging = false
     end
     private attr_reader :tasker
 
@@ -117,16 +119,44 @@ module Discharger
 
     # Abort if staging branch has different VERSION than working branch
     def validate_version_match!(staging, working, output: $stdout)
-      stage_v = git_show_version(staging)
+      staging_v = git_show_version(staging)
       working_v = git_show_version(working)
 
-      return sysecho("✓ Versions match (#{working_v})".bg(:green).black, output:) if stage_v == working_v
+      return sysecho("✓ Versions match (#{working_v})".bg(:green).black, output:) if staging_v == working_v
 
       abort <<~ERROR.bg(:red).white
-        VERSION mismatch: #{staging}=#{stage_v || "not found"}, #{working}=#{working_v || "not found"}
+        VERSION mismatch: #{staging}=#{staging_v || "not found"}, #{working}=#{working_v || "not found"}
 
-        Run: rake release:stage
-        Then retry: rake release
+        Run: rake #{name}:stage
+        Then retry: rake #{name}
+      ERROR
+    end
+
+    # Abort if HEAD is not the commit that last touched the version file
+    def validate_release_commit!(branch, output: $stdout)
+      head_sha = git_local_sha(branch)
+      release_sha = git_version_file_commit(branch)
+
+      if head_sha.nil? || release_sha.nil?
+        abort <<~ERROR.bg(:red).white
+          Could not determine release commit.
+
+          HEAD:           #{head_sha || "not found"}
+          Release commit: #{release_sha || "not found"}
+
+          Ensure #{branch} exists and #{version_file} has been modified.
+        ERROR
+      end
+
+      return sysecho("✓ HEAD is the release commit (#{head_sha[0, 8]})".bg(:green).black, output:) if head_sha == release_sha
+
+      abort <<~ERROR.bg(:red).white
+        HEAD is not the release commit!
+
+        HEAD:           #{head_sha[0, 8]}
+        Release commit: #{release_sha[0, 8]} (last commit to touch #{version_file})
+
+        Something was merged after the release PR. Verify the branch contents and retry.
       ERROR
     end
 
@@ -134,6 +164,18 @@ module Discharger
       content, _, status = Open3.capture3("git", "show", "origin/#{branch}:#{version_file}")
       return nil unless status.success?
       content[/VERSION\s*=\s*["']([^"']+)["']/, 1]
+    end
+
+    def git_local_sha(branch)
+      stdout, _, status = Open3.capture3("git", "rev-parse", branch)
+      return nil unless status.success?
+      stdout.strip
+    end
+
+    def git_version_file_commit(branch)
+      stdout, _, status = Open3.capture3("git", "log", branch, "-1", "--format=%H", "--", version_file)
+      return nil unless status.success?
+      stdout.strip
     end
 
     def define
@@ -155,25 +197,40 @@ module Discharger
       DESC
       task "#{name}": [:environment] do
         current_version = Object.const_get(version_constant)
+
+        # When auto_deploy_staging is enabled, release directly from working_branch
+        # instead of staging_branch (for CI/CD pipelines that auto-deploy staging)
+        release_source = auto_deploy_staging ? working_branch : staging_branch
+
         sysecho <<~MSG
           Releasing version #{current_version} to production.
 
           This will tag the current version and push it to the production branch.
+          Release source: #{release_source}
         MSG
         sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
         input = $stdin.gets
         exit if input.chomp.match?(/^x/i)
 
-        # Validate stage branch has same VERSION as working branch
-        validate_version_match!(staging_branch, working_branch)
-
-        continue = syscall(
+        # Fetch first, then validate what we fetched
+        syscall(
           ["git checkout #{working_branch}"],
           ["git branch -D #{staging_branch} 2>/dev/null || true"],
           ["git branch -D #{production_branch} 2>/dev/null || true"],
-          ["git fetch origin #{staging_branch}:#{staging_branch} #{production_branch}:#{production_branch}"],
+          ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
+        )
+
+        if auto_deploy_staging
+          # Ensure HEAD is the release commit (the commit that touched the version file)
+          validate_release_commit!(release_source)
+        else
+          # Standard mode: validate staging branch has same VERSION as working branch
+          validate_version_match!(staging_branch, working_branch)
+        end
+
+        continue = syscall(
           ["git checkout #{production_branch}"],
-          ["git reset --hard #{staging_branch}"],
+          ["git reset --hard #{release_source}"],
           ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
           ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
           ["git push origin v#{current_version}"]
@@ -230,6 +287,10 @@ module Discharger
 
         desc description
         task build: :environment do
+          if auto_deploy_staging
+            sysecho "Note: auto_deploy_staging is enabled. Staging deploys automatically from #{working_branch}.".bg(:yellow).black
+          end
+
           # Allow overriding the working branch via environment variable
           build_branch = ENV["DISCHARGER_BUILD_BRANCH"] || working_branch
 
@@ -308,6 +369,9 @@ module Discharger
 
           pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
 
+          next_step = auto_deploy_staging ? "rake #{name}" : "rake #{name}:stage"
+          next_step_desc = auto_deploy_staging ? "release to production" : "stage the release branch"
+
           continue = syscall ["git push origin #{finish_branch} --force"] do
             sysecho <<~MSG
               Branch #{finish_branch} created.
@@ -316,8 +380,8 @@ module Discharger
               #{pr_url}
 
               Once the PR is merged, pull down #{working_branch} and run
-                'rake #{name}:stage'
-              to stage the release branch.
+                '#{next_step}'
+              to #{next_step_desc}.
             MSG
           end
           if continue
@@ -337,6 +401,15 @@ module Discharger
               bin/rails #{name}:build
         DESC
         task stage: [:environment] do
+          if auto_deploy_staging
+            sysecho <<~MSG.bg(:yellow).black
+              Note: auto_deploy_staging is enabled.
+              Staging is handled automatically when code is pushed to #{working_branch}.
+              To release to production, run: 'rake #{name}'
+            MSG
+            next
+          end
+
           tasker["build"].invoke
           current_version = Object.const_get(version_constant)
 
