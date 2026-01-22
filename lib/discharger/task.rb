@@ -1,6 +1,7 @@
 require "rake/tasklib"
 require "reissue/rake"
 require "rainbow/refinement"
+require "open3"
 using Rainbow
 
 module Discharger
@@ -109,13 +110,30 @@ module Discharger
       success
     end
 
-    # Echo a message to the console
-    #
-    # @param message [String] the message to echo
-    # return [TrueClass]
     def sysecho(message, output: $stdout)
       output.puts message
       true
+    end
+
+    # Abort if staging branch has different VERSION than working branch
+    def validate_version_match!(staging, working, output: $stdout)
+      stage_v = git_show_version(staging)
+      working_v = git_show_version(working)
+
+      return sysecho("✓ Versions match (#{working_v})".bg(:green).black, output:) if stage_v == working_v
+
+      abort <<~ERROR.bg(:red).white
+        VERSION mismatch: #{staging}=#{stage_v || "not found"}, #{working}=#{working_v || "not found"}
+
+        Run: rake release:stage
+        Then retry: rake release
+      ERROR
+    end
+
+    def git_show_version(branch)
+      content, _, status = Open3.capture3("git", "show", "origin/#{branch}:#{version_file}")
+      return nil unless status.success?
+      content[/VERSION\s*=\s*["']([^"']+)["']/, 1]
     end
 
     def define
@@ -145,6 +163,9 @@ module Discharger
         sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
         input = $stdin.gets
         exit if input.chomp.match?(/^x/i)
+
+        # Validate stage branch has same VERSION as working branch
+        validate_version_match!(staging_branch, working_branch)
 
         continue = syscall(
           ["git checkout #{working_branch}"],
