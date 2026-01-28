@@ -7,8 +7,6 @@ require "reissue/gem"
 
 Reissue::Task.create :reissue do |task|
   task.version_file = "lib/discharger/version.rb"
-  task.commit = !ENV["GITHUB_ACTIONS"]
-  task.commit_finalize = !ENV["GITHUB_ACTIONS"]
   task.push_finalize = :branch
   task.clear_fragments = true
 end
