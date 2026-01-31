@@ -255,8 +255,9 @@ module Discharger
         tasker["reissue"].invoke
 
         new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
-
-        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?expand=1&title=Begin%20#{current_version}"
+        new_version = new_version_branch.split("/").last
+        params = {expand: 1, title: "Bump version to #{new_version}"}
+        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
 
         syscall(["git push origin #{new_version_branch} --force"]) do
           sysecho <<~MSG
@@ -268,7 +269,7 @@ module Discharger
             Opening PR: #{pr_url}
           MSG
         end.then do |success|
-          syscall ["open #{pr_url}"] if success
+          syscall ["open", pr_url] if success
         end
       end
 
@@ -415,7 +416,7 @@ module Discharger
 
           params = {
             expand: 1,
-            title: "Release #{current_version} to production",
+            title: "Stage to Main",
             body: <<~BODY
               Deploy #{current_version} to production.
             BODY
@@ -431,7 +432,7 @@ module Discharger
 
             Once the PR is **approved**, run 'rake release' to release the version.
           MSG
-          syscall ["open #{pr_url}"]
+          syscall ["open", pr_url]
         end
       end
     end
