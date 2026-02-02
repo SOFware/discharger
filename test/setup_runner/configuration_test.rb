@@ -10,7 +10,7 @@ class ConfigurationTest < ActiveSupport::TestCase
 
     assert_equal "Application", config.app_name
     assert_instance_of Discharger::SetupRunner::DatabaseConfig, config.database
-    assert_instance_of Discharger::SetupRunner::RedisConfig, config.redis
+    assert_nil config.redis
     assert_equal [], config.services
     assert_equal [], config.steps
     assert_equal [], config.custom_steps
@@ -72,7 +72,8 @@ class ConfigurationTest < ActiveSupport::TestCase
     # Check defaults are preserved
     assert_equal "db-app", config.database.name
     assert_equal "14", config.database.version
-    assert_equal 6379, config.redis.port
+    # Redis not configured in YAML, so should be nil
+    assert_nil config.redis
   end
 
   test "handles empty YAML file" do
@@ -83,7 +84,8 @@ class ConfigurationTest < ActiveSupport::TestCase
     # Should use all defaults
     assert_equal "Application", config.app_name
     assert_equal 5432, config.database.port
-    assert_equal 6379, config.redis.port
+    # Redis not configured, so should be nil
+    assert_nil config.redis
   end
 
   test "raises error for non-existent file" do
