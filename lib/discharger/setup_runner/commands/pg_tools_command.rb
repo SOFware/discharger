@@ -13,7 +13,7 @@ module Discharger
         end
 
         def can_execute?
-          config.respond_to?(:db_config) && config.db_config&.name.present?
+          config.respond_to?(:database) && config.database&.name.present?
         end
 
         def execute
@@ -25,7 +25,7 @@ module Discharger
         private
 
         def container_name
-          config.db_config.name
+          config.database.name
         end
 
         def create_pg_tools_directory
