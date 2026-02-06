@@ -37,6 +37,28 @@ class DischargerTaskTest < Minitest::Test
     assert_equal "Finalize commit", task.commit_finalize
   end
 
+  def test_create_forwards_tag_pattern_to_reissue
+    pattern = /^v(\d+\.\d+\..+)$/
+    captured_tag_pattern = nil
+
+    original_create = Reissue::Task.method(:create)
+    Reissue::Task.define_singleton_method(:create) do |name = :reissue, &block|
+      reissue_task = Reissue::Task.new(name)
+      block&.call(reissue_task)
+      captured_tag_pattern = reissue_task.tag_pattern
+      reissue_task
+    end
+
+    Discharger::Task.create(:test_tag_pattern) do
+      self.version_file = "VERSION"
+      self.tag_pattern = pattern
+    end
+
+    assert_equal pattern, captured_tag_pattern
+  ensure
+    Reissue::Task.define_singleton_method(:create, original_create)
+  end
+
   def test_syscall_success
     output = StringIO.new
     assert_output(/Hello, World!/) do

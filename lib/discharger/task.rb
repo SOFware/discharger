@@ -23,6 +23,7 @@ module Discharger
         end
         reissue.fragment = task.fragment
         reissue.clear_fragments = task.clear_fragments
+        reissue.tag_pattern = task.tag_pattern
       end
       task.define
       task
