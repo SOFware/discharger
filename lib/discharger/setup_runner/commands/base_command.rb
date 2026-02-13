@@ -163,19 +163,23 @@ module Discharger
         end
 
         def ask_to_install(description)
-          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
-            puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
+          if ENV["CI"] || ENV["QUIET_SETUP"] || !$stdin.tty?
+            return yield
           end
-          if gets.chomp == "Y"
+
+          puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
+          if gets&.chomp == "Y"
             yield
           end
         end
 
         def proceed_with(task)
-          unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
-            puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
+          if ENV["CI"] || ENV["QUIET_SETUP"] || !$stdin.tty?
+            return yield
           end
-          if gets.chomp == "Y"
+
+          puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
+          if gets&.chomp == "Y"
             yield
           end
         end
