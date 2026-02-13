@@ -163,9 +163,7 @@ module Discharger
         end
 
         def ask_to_install(description)
-          if ENV["CI"] || ENV["QUIET_SETUP"] || !$stdin.tty?
-            return yield
-          end
+          return yield unless $stdin.tty?
 
           puts "You do not currently use #{description}.\n ===> If you want to, type Y\nOtherwise hit any key to ignore."
           if gets&.chomp == "Y"
@@ -174,9 +172,7 @@ module Discharger
         end
 
         def proceed_with(task)
-          if ENV["CI"] || ENV["QUIET_SETUP"] || !$stdin.tty?
-            return yield
-          end
+          return yield unless $stdin.tty?
 
           puts "Proceed with #{task}?\n ===> Type Y to proceed\nOtherwise hit any key to ignore."
           if gets&.chomp == "Y"

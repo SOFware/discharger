@@ -80,8 +80,10 @@ class AsdfCommandTest < ActiveSupport::TestCase
       StringIO.new("Y\n").gets
     }
 
-    capture_output do
-      @command.execute
+    with_tty_stdin do
+      capture_output do
+        @command.execute
+      end
     end
 
     assert user_responded
@@ -119,8 +121,10 @@ class AsdfCommandTest < ActiveSupport::TestCase
 
     @command.define_singleton_method(:gets) { StringIO.new("Y\n").gets }
 
-    capture_output do
-      @command.execute
+    with_tty_stdin do
+      capture_output do
+        @command.execute
+      end
     end
 
     assert_includes plugins_added, "asdf plugin add ruby https://github.com/asdf-vm/asdf-ruby.git"
@@ -150,8 +154,10 @@ class AsdfCommandTest < ActiveSupport::TestCase
 
     @command.define_singleton_method(:gets) { StringIO.new("n\n").gets }
 
-    capture_output do
-      @command.execute
+    with_tty_stdin do
+      capture_output do
+        @command.execute
+      end
     end
 
     assert_empty plugins_added

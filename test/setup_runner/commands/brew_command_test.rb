@@ -29,7 +29,6 @@ class BrewCommandTest < ActiveSupport::TestCase
   test "execute runs brew bundle when user confirms" do
     create_file("Brewfile", "brew 'git'")
 
-    # Mock user input and system call
     input = StringIO.new("Y\n")
     @command.define_singleton_method(:gets) { input.gets }
 
@@ -38,8 +37,10 @@ class BrewCommandTest < ActiveSupport::TestCase
       system_called = true if args.join(" ") == "brew bundle"
     end
 
-    output, _ = with_output_enabled do
-      capture_output { @command.execute }
+    output, _ = with_tty_stdin do
+      with_output_enabled do
+        capture_output { @command.execute }
+      end
     end
 
     assert system_called
@@ -49,7 +50,6 @@ class BrewCommandTest < ActiveSupport::TestCase
   test "execute does not run brew bundle when user declines" do
     create_file("Brewfile", "brew 'git'")
 
-    # Mock user input
     input = StringIO.new("n\n")
     @command.define_singleton_method(:gets) { input.gets }
 
@@ -58,8 +58,10 @@ class BrewCommandTest < ActiveSupport::TestCase
       system_called = true if args.join(" ") == "brew bundle"
     end
 
-    capture_output do
-      @command.execute
+    with_tty_stdin do
+      capture_output do
+        @command.execute
+      end
     end
 
     refute system_called
