@@ -90,11 +90,20 @@ module SetupRunnerTestHelper
   end
 
   def with_output_enabled(&block)
-    # Temporarily enable output for tests that need to capture it
     original_quiet = ENV["QUIET_SETUP"]
     ENV.delete("QUIET_SETUP")
     yield
   ensure
     ENV["QUIET_SETUP"] = original_quiet if original_quiet
+  end
+
+  def with_tty_stdin
+    original_stdin = $stdin
+    tty_io = StringIO.new
+    tty_io.define_singleton_method(:tty?) { true }
+    $stdin = tty_io
+    yield
+  ensure
+    $stdin = original_stdin
   end
 end

@@ -245,7 +245,7 @@ class DockerCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when /docker ps.*db-test/
-        commands_run.include?("docker run -d --name db-test -p 5432:5432 -e POSTGRES_PASSWORD=postgres -v db-test:/var/lib/postgresql/data postgres:14")
+        commands_run.include?("docker run -d --name db-test --user postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -v db-test:/var/lib/postgresql/data postgres:14")
       when /docker inspect db-test/
         true
       when /docker start db-test/

@@ -119,7 +119,39 @@ module Discharger
             # Docker first: use container's #{tool} if running
             if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER}$"; then
               echo "Using #{tool} from Docker container: $CONTAINER" >&2
-              exec docker exec -i "$CONTAINER" #{tool} "$@"
+
+              # Parse arguments to handle --file option specially
+              # When running in Docker, host paths don't exist in the container
+              # so we pipe file content via stdin instead
+              INPUT_FILE=""
+              ARGS=()
+              while [[ $# -gt 0 ]]; do
+                case $1 in
+                  --file)
+                    INPUT_FILE="$2"
+                    shift 2
+                    ;;
+                  --file=*)
+                    INPUT_FILE="${1#*=}"
+                    shift
+                    ;;
+                  -f)
+                    INPUT_FILE="$2"
+                    shift 2
+                    ;;
+                  *)
+                    ARGS+=("$1")
+                    shift
+                    ;;
+                esac
+              done
+
+              if [[ -n "$INPUT_FILE" ]]; then
+                docker exec -i "$CONTAINER" #{tool} "${ARGS[@]}" < "$INPUT_FILE"
+              else
+                exec docker exec -i "$CONTAINER" #{tool} "${ARGS[@]}"
+              fi
+              exit 0
             fi
 
             # Fallback to system #{tool}

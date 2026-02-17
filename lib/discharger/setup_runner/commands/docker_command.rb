@@ -98,7 +98,7 @@ module Discharger
         def create_container(name:, port:, image:, internal_port:, env: {}, volume: nil)
           log "Creating new #{name} container"
 
-          cmd = ["docker", "run", "-d", "--name", name, "-p", "#{port}:#{internal_port}"]
+          cmd = ["docker", "run", "-d", "--name", name, "--user", "postgres", "-p", "#{port}:#{internal_port}"]
           env.each { |k, v| cmd.push("-e", "#{k}=#{v}") }
           cmd.push("-v", volume) if volume
           cmd.push(image)
@@ -152,12 +152,11 @@ module Discharger
         end
 
         def native_postgresql_available?
-          # Check common PostgreSQL ports
-          [5432, 5433].each do |port|
-            if postgresql_running_on_port?(port)
-              @native_pg_port = port
-              return true
-            end
+          configured_port = (config.database&.port || 5432).to_i
+
+          if postgresql_running_on_port?(configured_port)
+            @native_pg_port = configured_port
+            return true
           end
           false
         end

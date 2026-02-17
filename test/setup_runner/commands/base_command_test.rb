@@ -100,14 +100,15 @@ class BaseCommandTest < ActiveSupport::TestCase
   test "ask_to_install prompts user and yields on Y" do
     command = TestCommand.new(@config, @test_dir, @logger)
 
-    # Simulate user input
     input = StringIO.new("Y\n")
     command.define_singleton_method(:gets) { input.gets }
 
     yielded = false
-    output, _ = with_output_enabled do
-      capture_output do
-        command.send(:ask_to_install, "test tool") { yielded = true }
+    output, _ = with_tty_stdin do
+      with_output_enabled do
+        capture_output do
+          command.send(:ask_to_install, "test tool") { yielded = true }
+        end
       end
     end
 
@@ -118,13 +119,14 @@ class BaseCommandTest < ActiveSupport::TestCase
   test "ask_to_install doesn't yield on non-Y input" do
     command = TestCommand.new(@config, @test_dir, @logger)
 
-    # Simulate user input
     input = StringIO.new("n\n")
     command.define_singleton_method(:gets) { input.gets }
 
     yielded = false
-    capture_output do
-      command.send(:ask_to_install, "test tool") { yielded = true }
+    with_tty_stdin do
+      capture_output do
+        command.send(:ask_to_install, "test tool") { yielded = true }
+      end
     end
 
     refute yielded
@@ -133,19 +135,31 @@ class BaseCommandTest < ActiveSupport::TestCase
   test "proceed_with prompts user and yields on Y" do
     command = TestCommand.new(@config, @test_dir, @logger)
 
-    # Simulate user input
     input = StringIO.new("Y\n")
     command.define_singleton_method(:gets) { input.gets }
 
     yielded = false
-    output, _ = with_output_enabled do
-      capture_output do
-        command.send(:proceed_with, "test task") { yielded = true }
+    output, _ = with_tty_stdin do
+      with_output_enabled do
+        capture_output do
+          command.send(:proceed_with, "test task") { yielded = true }
+        end
       end
     end
 
     assert yielded
     assert_match(/Proceed with test task\?/, output)
+  end
+
+  test "proceed_with auto-accepts when stdin is not a tty" do
+    command = TestCommand.new(@config, @test_dir, @logger)
+
+    yielded = false
+    capture_output do
+      command.send(:proceed_with, "test task") { yielded = true }
+    end
+
+    assert yielded
   end
 
   test "subclass can override can_execute?" do
