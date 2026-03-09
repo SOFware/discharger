@@ -98,7 +98,7 @@ module Discharger
         def create_container(name:, port:, image:, internal_port:, env: {}, volume: nil)
           log "Creating new #{name} container"
 
-          cmd = ["docker", "run", "-d", "--name", name, "--user", "postgres", "-p", "#{port}:#{internal_port}"]
+          cmd = ["docker", "run", "-d", "--name", name, "-p", "#{port}:#{internal_port}"]
           env.each { |k, v| cmd.push("-e", "#{k}=#{v}") }
           cmd.push("-v", volume) if volume
           cmd.push(image)
