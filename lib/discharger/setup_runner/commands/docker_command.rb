@@ -151,11 +151,11 @@ module Discharger
         end
 
         def database_configured?
-          config.database&.name
+          config.respond_to?(:database) && config.database&.name
         end
 
         def redis_configured?
-          config.redis&.name
+          config.respond_to?(:redis) && config.redis&.name
         end
 
         def database_config

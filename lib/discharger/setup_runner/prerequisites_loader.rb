@@ -132,6 +132,8 @@ module Discharger
           ENV[$1].nil? || ENV[$1].empty?
         when /^File\.exist\?\(['"](.+)['"]\)$/
           File.exist?($1)
+        when /^!File\.exist\?\(['"](.+)['"]\)$/
+          !File.exist?($1)
         else
           false
         end

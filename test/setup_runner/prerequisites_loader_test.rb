@@ -210,4 +210,32 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     output, _ = capture_io { loader.run }
     assert_match(/Running: Check file/, output)
   end
+
+  test "evaluate_condition handles negated File.exist? checks" do
+    yaml_content = <<~YAML
+      pre_steps:
+        - command: "true"
+          description: Create env file
+          condition: "!File.exist?('missing_file.txt')"
+    YAML
+    create_file("setup.yml", yaml_content)
+
+    loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
+
+    output, _ = capture_io { loader.run }
+    assert_match(/Running: Create env file/, output)
+
+    create_file("present.txt", "x")
+    yaml_content = <<~YAML
+      pre_steps:
+        - command: "true"
+          description: Should skip
+          condition: "!File.exist?('present.txt')"
+    YAML
+    create_file("setup.yml", yaml_content)
+
+    loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
+    output, _ = capture_io { loader.run }
+    assert_match(/Skipping: Should skip/, output)
+  end
 end
