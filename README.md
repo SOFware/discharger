@@ -187,6 +187,30 @@ custom_steps:
     command: "bin/rails db:seed"
 ```
 
+### Pre-Rails Steps (Prerequisites)
+
+The `pre_steps` array defines commands that run **before Rails loads**. These are for system dependencies and environment setup that must be in place before bundler or Rails can initialize.
+
+Built-in pre_steps:
+- `homebrew` - Installs Homebrew if not present (macOS)
+- `postgresql_tools` - Installs PostgreSQL client tools (`pg_dump`, `psql`)
+
+```yaml
+pre_steps:
+  - homebrew
+  - postgresql_tools
+```
+
+You can also define custom pre_steps with shell commands:
+
+```yaml
+pre_steps:
+  - homebrew
+  - description: "Set up environment variables"
+    command: "cp .env.example .env"
+    condition: "!File.exist?('.env')"
+```
+
 ### Using Default Steps
 
 The `steps` array specifies which built-in setup commands to run. Available commands include:
