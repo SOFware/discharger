@@ -158,3 +158,160 @@ class DischargerTaskTest < Minitest::Test
     assert_equal true, @task.auto_deploy_staging
   end
 end
+
+class DischargerReleaseCommandSequenceTest < Minitest::Test
+  FAKE_VERSION = "1.2.3"
+
+  def setup
+    @commands = []
+    @original_stdin = $stdin
+    Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
+  end
+
+  def teardown
+    $stdin = @original_stdin
+  end
+
+  def build_task(name, auto_deploy:)
+    noop_task = Object.new
+    noop_task.define_singleton_method(:invoke) { |*_args| }
+    noop_task.define_singleton_method(:reenable) {}
+    mock_tasker = Object.new
+    mock_tasker.define_singleton_method(:[]) { |_name| noop_task }
+
+    task = Discharger::Task.new(name, tasker: mock_tasker)
+    task.version_constant = "DischargerReleaseCommandSequenceTest::FAKE_VERSION"
+    task.version_file = "VERSION"
+    task.changelog_file = "CHANGELOG.md"
+    task.release_message_channel = "#releases"
+    task.chat_token = "fake_token"
+    task.pull_request_url = "http://example.com"
+    task.app_name = "TestApp"
+    task.commit_identifier = -> { "abc123" }
+    task.auto_deploy_staging = auto_deploy
+
+    commands = @commands
+    task.define_singleton_method(:syscall) do |*steps, **_kwargs, &_block|
+      steps.each { |cmd| commands << cmd }
+      true
+    end
+    task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:validate_release_commit!) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+
+    task
+  end
+
+  def command_issued?(pattern)
+    @commands.any? { |cmd|
+      joined = cmd.join(" ")
+      pattern.is_a?(Regexp) ? joined.match?(pattern) : joined == pattern
+    }
+  end
+
+  def test_standard_mode_merges_staging_without_pr_create
+    task = build_task(:rel_std_seq, auto_deploy: false)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_std_seq"].invoke }
+
+    refute command_issued?(/gh pr create/),
+      "Standard mode should not create a PR"
+    assert command_issued?("gh pr merge stage --merge"),
+      "Should merge staging branch"
+    assert command_issued?(/git tag -a v1\.2\.3 .+ main/),
+      "Should tag production branch"
+    assert command_issued?("git push origin v1.2.3"),
+      "Should push the tag"
+    assert command_issued?(/git fetch origin stage:stage main:main/),
+      "Should fetch staging and production branches"
+  end
+
+  def test_auto_deploy_mode_creates_pr_then_merges_working_branch
+    task = build_task(:rel_auto_seq, auto_deploy: true)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_auto_seq"].invoke }
+
+    assert command_issued?(/gh pr create --base main --head develop/),
+      "Auto-deploy should create PR from working branch to production"
+    assert command_issued?("gh pr merge develop --merge"),
+      "Auto-deploy should merge working branch (not staging)"
+    assert command_issued?(/git tag -a v1\.2\.3 .+ main/),
+      "Should tag production branch"
+    assert command_issued?("git push origin v1.2.3"),
+      "Should push the tag"
+    assert command_issued?("git fetch origin main:main develop"),
+      "Should fetch production branch and working branch tracking ref"
+    assert command_issued?("git reset --hard origin/develop"),
+      "Should reset working branch to match remote"
+  end
+
+  def test_auto_deploy_mode_pr_create_precedes_merge
+    task = build_task(:rel_order_seq, auto_deploy: true)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_order_seq"].invoke }
+
+    create_idx = @commands.index { |c| c.join(" ").match?(/gh pr create/) }
+    merge_idx = @commands.index { |c| c.join(" ").match?(/gh pr merge/) }
+
+    assert create_idx, "Expected gh pr create command"
+    assert merge_idx, "Expected gh pr merge command"
+    assert_operator create_idx, :<, merge_idx,
+      "PR create must precede PR merge"
+  end
+
+  def test_auto_deploy_mode_reuses_existing_pr
+    task = build_task(:rel_reuse_seq, auto_deploy: true)
+    task.define_singleton_method(:existing_pr_number) { |*_args| "42" }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_reuse_seq"].invoke }
+
+    refute command_issued?(/gh pr create/),
+      "Should not create a PR when one already exists"
+    assert command_issued?("gh pr merge 42 --merge"),
+      "Should merge by PR number when reusing an existing PR"
+  end
+end
+
+class DischargerExistingPrNumberTest < Minitest::Test
+  FakeStatus = Struct.new(:ok) do
+    def success? = ok
+  end
+
+  def setup
+    @task = Discharger::Task.new
+    @original_capture3 = Open3.method(:capture3)
+  end
+
+  def teardown
+    Open3.define_singleton_method(:capture3, @original_capture3)
+  end
+
+  def stub_capture3(stdout, stderr, success)
+    status = FakeStatus.new(success)
+    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
+  end
+
+  def test_returns_pr_number_when_pr_exists
+    stub_capture3("42\n", "", true)
+    assert_equal "42", @task.existing_pr_number("main", "develop")
+  end
+
+  def test_returns_nil_when_no_pr_exists
+    stub_capture3("", "", true)
+    assert_nil @task.existing_pr_number("main", "develop")
+  end
+
+  def test_returns_nil_on_command_failure
+    stub_capture3("", "error", false)
+    assert_nil @task.existing_pr_number("main", "develop")
+  end
+end

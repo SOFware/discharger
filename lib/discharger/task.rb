@@ -179,6 +179,20 @@ module Discharger
       stdout.strip
     end
 
+    def existing_pr_number(base, head)
+      stdout, _, status = Open3.capture3(
+        "gh", "pr", "list",
+        "--base", base,
+        "--head", head,
+        "--state", "open",
+        "--json", "number",
+        "--jq", ".[0].number // empty"
+      )
+      return nil unless status.success?
+      pr = stdout.strip
+      pr.empty? ? nil : pr
+    end
+
     def define
       require "slack-ruby-client"
       Slack.configure do |config|
@@ -189,14 +203,17 @@ module Discharger
         ---------- STEP 3 ----------
         Release the current version to production
 
-        This task rebases the production branch on the staging branch and tags the
-        current version. The production branch and the tag will be pushed to the
-        remote repository.
+        This task merges the release branch into production via a GitHub pull
+        request and tags the current version.
 
         After the release is complete, a new branch will be created to bump the
         version for the next release.
       DESC
       task "#{name}": [:environment] do
+        unless system("gh --version > /dev/null 2>&1")
+          abort "Error: GitHub CLI (gh) is required for the release process but was not found. Install it: https://cli.github.com"
+        end
+
         current_version = Object.const_get(version_constant)
 
         # When auto_deploy_staging is enabled, release directly from working_branch
@@ -213,27 +230,45 @@ module Discharger
         input = $stdin.gets
         exit if input.chomp.match?(/^x/i)
 
-        # Fetch first, then validate what we fetched
         syscall(
           ["git checkout #{working_branch}"],
           ["git branch -D #{staging_branch} 2>/dev/null || true"],
-          ["git branch -D #{production_branch} 2>/dev/null || true"],
-          ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
+          ["git branch -D #{production_branch} 2>/dev/null || true"]
         )
 
         if auto_deploy_staging
-          # Ensure HEAD is the release commit (the commit that touched the version file)
+          syscall(
+            ["git fetch origin #{production_branch}:#{production_branch} #{working_branch}"],
+            ["git reset --hard origin/#{working_branch}"]
+          )
           validate_release_commit!(release_source)
         else
-          # Standard mode: validate staging branch has same VERSION as working branch
+          syscall(
+            ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
+          )
           validate_version_match!(staging_branch, working_branch)
         end
 
+        pr_ref = release_source
+        if auto_deploy_staging
+          pr_number = existing_pr_number(production_branch, release_source)
+          if pr_number
+            sysecho "Reusing existing PR ##{pr_number} from #{release_source} to #{production_branch}."
+            pr_ref = pr_number
+          else
+            syscall(
+              ["gh pr create --base #{production_branch} --head #{release_source} --title 'Release #{current_version}' --body 'Deploy #{current_version} to production.'"]
+            )
+          end
+        end
+
+        syscall(
+          ["gh pr merge #{pr_ref} --merge"]
+        )
+
         continue = syscall(
-          ["git checkout #{production_branch}"],
-          ["git reset --hard #{release_source}"],
-          ["git tag -a v#{current_version} -m 'Release #{current_version}'"],
-          ["git push origin #{production_branch}:#{production_branch} v#{current_version}:v#{current_version}"],
+          ["git fetch origin #{production_branch}:#{production_branch}"],
+          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{production_branch}"],
           ["git push origin v#{current_version}"]
         ) do
           tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
@@ -242,7 +277,8 @@ module Discharger
             tasker["#{name}:slack"].reenable
             tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
           end
-          syscall ["git checkout #{working_branch}"]
+          # Signal success — no branch switch needed since we stay on working_branch throughout
+          true
         end
 
         abort "Release failed." unless continue
