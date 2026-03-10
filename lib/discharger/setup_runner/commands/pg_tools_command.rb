@@ -104,8 +104,16 @@ module Discharger
               exit 0
             fi
 
-            # Fallback to system pg_dump
-            exec pg_dump "$@"
+            # Fallback to system pg_dump (skip this wrapper in PATH to avoid infinite loop)
+            SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+            CLEAN_PATH="${PATH//$SCRIPT_DIR:/}"
+            CLEAN_PATH="${CLEAN_PATH%:$SCRIPT_DIR}"
+            FALLBACK=$(PATH="$CLEAN_PATH" command -v pg_dump 2>/dev/null)
+            if [[ -n "$FALLBACK" ]]; then
+              exec "$FALLBACK" "$@"
+            fi
+            echo "Error: pg_dump not found. Start Docker or install PostgreSQL client tools." >&2
+            exit 1
           BASH
         end
 
@@ -124,6 +132,7 @@ module Discharger
               # When running in Docker, host paths don't exist in the container
               # so we pipe file content via stdin instead
               INPUT_FILE=""
+              HAS_USER=""
               ARGS=()
               while [[ $# -gt 0 ]]; do
                 case $1 in
@@ -139,12 +148,22 @@ module Discharger
                     INPUT_FILE="$2"
                     shift 2
                     ;;
+                  -U|--username|--username=*)
+                    HAS_USER="1"
+                    ARGS+=("$1")
+                    shift
+                    ;;
                   *)
                     ARGS+=("$1")
                     shift
                     ;;
                 esac
               done
+
+              # Default to postgres user if not specified (container runs as root)
+              if [[ -z "$HAS_USER" ]]; then
+                ARGS=("-U" "postgres" "${ARGS[@]}")
+              fi
 
               if [[ -n "$INPUT_FILE" ]]; then
                 docker exec -i "$CONTAINER" #{tool} "${ARGS[@]}" < "$INPUT_FILE"
@@ -154,8 +173,16 @@ module Discharger
               exit 0
             fi
 
-            # Fallback to system #{tool}
-            exec #{tool} "$@"
+            # Fallback to system #{tool} (skip this wrapper in PATH to avoid infinite loop)
+            SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+            CLEAN_PATH="${PATH//$SCRIPT_DIR:/}"
+            CLEAN_PATH="${CLEAN_PATH%:$SCRIPT_DIR}"
+            FALLBACK=$(PATH="$CLEAN_PATH" command -v #{tool} 2>/dev/null)
+            if [[ -n "$FALLBACK" ]]; then
+              exec "$FALLBACK" "$@"
+            fi
+            echo "Error: #{tool} not found. Start Docker or install PostgreSQL client tools." >&2
+            exit 1
           BASH
         end
 
