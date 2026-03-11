@@ -7,8 +7,8 @@ require "reissue/gem"
 
 Reissue::Task.create :reissue do |task|
   task.version_file = "lib/discharger/version.rb"
+  task.fragment = :git
   task.push_finalize = :branch
-  task.clear_fragments = true
 end
 
 Rake::TestTask.new(:test) do |t|
