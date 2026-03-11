@@ -20,7 +20,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     run_generator
 
     assert_file "bin/setup" do |content|
-      assert_match(/Discharger::SetupRunner/, content)
+      assert_match(/Discharger::Setup\.run/, content)
     end
 
     # Check file is executable
@@ -31,7 +31,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     run_generator ["--setup_path=scripts/setup"]
 
     assert_file "scripts/setup" do |content|
-      assert_match(/Discharger::SetupRunner/, content)
+      assert_match(/Discharger::Setup\.run/, content)
     end
 
     # Check file is executable
@@ -43,7 +43,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
 
     assert_file "config/setup.yml" do |content|
       assert_match(/app_name:/, content)
-      assert_match(/commands:/, content)
+      assert_match(/steps:/, content)
     end
   end
 
