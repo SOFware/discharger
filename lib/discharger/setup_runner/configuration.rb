@@ -10,7 +10,7 @@ module Discharger
       def initialize
         @app_name = "Application"
         @database = DatabaseConfig.new
-        @redis = RedisConfig.new
+        @redis = nil
         @services = []
         @steps = []
         @custom_steps = []
@@ -25,7 +25,7 @@ module Discharger
 
         config.app_name = yaml["app_name"] if yaml["app_name"]
         config.database.from_hash(yaml["database"]) if yaml["database"]
-        config.redis.from_hash(yaml["redis"]) if yaml["redis"]
+        config.redis = RedisConfig.new.tap { |r| r.from_hash(yaml["redis"]) } if yaml["redis"]
         config.services = yaml["services"] || []
         config.steps = yaml["steps"] || []
         config.custom_steps = yaml["custom_steps"] || []
