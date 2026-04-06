@@ -193,6 +193,16 @@ module Discharger
       pr.empty? ? nil : pr
     end
 
+    def pr_already_merged?(pr_ref)
+      stdout, _, status = Open3.capture3(
+        "gh", "pr", "view", pr_ref.to_s,
+        "--json", "state",
+        "--jq", ".state"
+      )
+      return false unless status.success?
+      stdout.strip == "MERGED"
+    end
+
     def define
       require "slack-ruby-client"
       Slack.configure do |config|
@@ -262,9 +272,13 @@ module Discharger
           end
         end
 
-        syscall(
-          ["gh pr merge #{pr_ref} --merge"]
-        )
+        if pr_already_merged?(pr_ref)
+          sysecho "PR #{pr_ref} is already merged. Continuing..."
+        else
+          syscall(
+            ["gh pr merge #{pr_ref} --merge"]
+          )
+        end
 
         continue = syscall(
           ["git fetch origin #{production_branch}:#{production_branch}"],

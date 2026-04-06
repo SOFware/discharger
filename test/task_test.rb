@@ -199,6 +199,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:validate_release_commit!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+    task.define_singleton_method(:pr_already_merged?) { |_ref| false }
 
     task
   end
@@ -266,6 +267,22 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "PR create must precede PR merge"
   end
 
+  def test_standard_mode_skips_merge_when_pr_already_merged
+    task = build_task(:rel_merged_seq, auto_deploy: false)
+    task.define_singleton_method(:pr_already_merged?) { |_ref| true }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_merged_seq"].invoke }
+
+    refute command_issued?(/gh pr merge/),
+      "Should not attempt merge when PR is already merged"
+    assert command_issued?(/git tag -a v1\.2\.3 .+ main/),
+      "Should still tag production branch"
+    assert command_issued?("git push origin v1.2.3"),
+      "Should still push the tag"
+  end
+
   def test_auto_deploy_mode_reuses_existing_pr
     task = build_task(:rel_reuse_seq, auto_deploy: true)
     task.define_singleton_method(:existing_pr_number) { |*_args| "42" }
@@ -278,6 +295,41 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should not create a PR when one already exists"
     assert command_issued?("gh pr merge 42 --merge"),
       "Should merge by PR number when reusing an existing PR"
+  end
+end
+
+class DischargerPrAlreadyMergedTest < Minitest::Test
+  FakeStatus = Struct.new(:ok) do
+    def success? = ok
+  end
+
+  def setup
+    @task = Discharger::Task.new
+    @original_capture3 = Open3.method(:capture3)
+  end
+
+  def teardown
+    Open3.define_singleton_method(:capture3, @original_capture3)
+  end
+
+  def stub_capture3(stdout, stderr, success)
+    status = FakeStatus.new(success)
+    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
+  end
+
+  def test_returns_true_when_pr_is_merged
+    stub_capture3("MERGED\n", "", true)
+    assert @task.pr_already_merged?("stage")
+  end
+
+  def test_returns_false_when_pr_is_open
+    stub_capture3("OPEN\n", "", true)
+    refute @task.pr_already_merged?("stage")
+  end
+
+  def test_returns_false_on_command_failure
+    stub_capture3("", "error", false)
+    refute @task.pr_already_merged?("stage")
   end
 end
 
