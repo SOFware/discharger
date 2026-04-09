@@ -1,3 +1,3 @@
 module Discharger
-  VERSION = "0.2.31"
+  VERSION = "0.3.1"
 end
