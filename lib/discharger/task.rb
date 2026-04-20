@@ -24,6 +24,7 @@ module Discharger
         reissue.fragment = task.fragment
         reissue.clear_fragments = task.clear_fragments
         reissue.tag_pattern = task.tag_pattern
+        reissue.retain_changelogs = task.retain_changelogs
       end
       task.define
       task
@@ -45,6 +46,7 @@ module Discharger
     attr_accessor :app_name
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
+    attr_accessor :pr_label
     attr_accessor :fragment_directory
     attr_accessor :fragment
     attr_accessor :clear_fragments
@@ -133,32 +135,35 @@ module Discharger
       ERROR
     end
 
-    # Abort if HEAD is not the commit that last touched the version file
-    def validate_release_commit!(branch, output: $stdout)
-      head_sha = git_local_sha(branch)
-      release_sha = git_version_file_commit(branch)
+    # Locate the commit that finalized changelog_file for the current version.
+    # Returns the SHA, or aborts with a clear message if it can't be found or
+    # does not appear to be a finalize commit for this version.
+    #
+    # This is intentionally a computation, not a gate on HEAD: if another PR
+    # landed on the branch after the finalize PR merged, HEAD is a merge commit
+    # whose ancestry includes the unrelated work. Tagging HEAD would ship that
+    # work. Tagging the finalize commit itself does not.
+    def find_release_commit!(branch, output: $stdout)
+      version = Object.const_get(version_constant)
+      version_header = /^## \[#{Regexp.escape(version)}\] - \d{4}-\d{2}-\d{2}/
+      sha = git_file_commits(branch, changelog_file).find do |candidate_sha|
+        next false if git_merge_commit?(candidate_sha)
 
-      if head_sha.nil? || release_sha.nil?
+        contents = git_show_at_commit(candidate_sha, changelog_file)
+        parent_contents = git_show_at_commit("#{candidate_sha}^", changelog_file)
+
+        contents&.match?(version_header) && !parent_contents&.match?(version_header)
+      end
+
+      if sha.nil?
         abort <<~ERROR.bg(:red).white
-          Could not determine release commit.
-
-          HEAD:           #{head_sha || "not found"}
-          Release commit: #{release_sha || "not found"}
-
-          Ensure #{branch} exists and #{version_file} has been modified.
+          Could not locate a release commit.
+          Ensure #{branch} exists and #{changelog_file} has been finalized for #{version}.
         ERROR
       end
 
-      return sysecho("✓ HEAD is the release commit (#{head_sha[0, 8]})".bg(:green).black, output:) if head_sha == release_sha
-
-      abort <<~ERROR.bg(:red).white
-        HEAD is not the release commit!
-
-        HEAD:           #{head_sha[0, 8]}
-        Release commit: #{release_sha[0, 8]} (last commit to touch #{version_file})
-
-        Something was merged after the release PR. Verify the branch contents and retry.
-      ERROR
+      sysecho("✓ Release commit: #{sha[0, 8]}".bg(:green).black, output:)
+      sha
     end
 
     def git_show_version(branch)
@@ -167,24 +172,35 @@ module Discharger
       content[/VERSION\s*=\s*["']([^"']+)["']/, 1]
     end
 
-    def git_local_sha(branch)
-      stdout, _, status = Open3.capture3("git", "rev-parse", branch)
-      return nil unless status.success?
-      stdout.strip
+    def git_file_commits(branch, path)
+      stdout, _, status = Open3.capture3("git", "log", "--no-merges", branch, "--format=%H", "--", path)
+      return [] unless status.success?
+      stdout.lines.map(&:strip)
     end
 
-    def git_version_file_commit(branch)
-      stdout, _, status = Open3.capture3("git", "log", branch, "-1", "--format=%H", "--", version_file)
-      return nil unless status.success?
-      stdout.strip
+    def git_merge_commit?(sha)
+      stdout, _, status = Open3.capture3("git", "rev-list", "--parents", "-n", "1", sha)
+      return false unless status.success?
+      stdout.split.length > 2
     end
 
-    def existing_pr_number(base, head)
+    def git_ancestor?(ancestor, descendant)
+      _, _, status = Open3.capture3("git", "merge-base", "--is-ancestor", ancestor, descendant)
+      status.success?
+    end
+
+    def git_show_at_commit(sha, path)
+      stdout, _, status = Open3.capture3("git", "show", "#{sha}:#{path}")
+      return nil unless status.success?
+      stdout
+    end
+
+    def existing_pr_number(base, head, state: "open")
       stdout, _, status = Open3.capture3(
         "gh", "pr", "list",
         "--base", base,
         "--head", head,
-        "--state", "open",
+        "--state", state,
         "--json", "number",
         "--jq", ".[0].number // empty"
       )
@@ -193,14 +209,58 @@ module Discharger
       pr.empty? ? nil : pr
     end
 
-    def pr_already_merged?(pr_ref)
-      stdout, _, status = Open3.capture3(
-        "gh", "pr", "view", pr_ref.to_s,
-        "--json", "state",
-        "--jq", ".state"
-      )
-      return false unless status.success?
-      stdout.strip == "MERGED"
+    def merge_release_pr!(base:, head:)
+      pr_number = existing_pr_number(base, head)
+      if pr_number
+        return syscall(["gh", "pr", "merge", pr_number, "--merge"])
+      end
+
+      return sysecho("Branch #{head} is already merged into #{base}. Continuing...") if git_ancestor?(head, base)
+
+      abort <<~ERROR.bg(:red).white
+        Could not find an open PR from #{head} to #{base}.
+
+        Run: rake #{name}:stage
+        Then retry: rake #{name}
+      ERROR
+    end
+
+    def require_gh!(reason)
+      return true if system("gh", "auth", "status", out: File::NULL, err: File::NULL)
+
+      abort "Error: authenticated GitHub CLI (gh) is required for #{reason}. Run `gh auth login` and retry."
+    end
+
+    def validate_pr_label!
+      return true unless pr_label
+
+      _, stderr, status = Open3.capture3("gh", "label", "view", pr_label)
+      return true if status.success?
+
+      abort <<~ERROR.bg(:red).white
+        Could not find GitHub label '#{pr_label}'.
+
+        #{stderr}
+      ERROR
+    end
+
+    def ensure_clean_worktree!
+      stdout, _, status = Open3.capture3("git", "status", "--porcelain")
+      return true if status.success? && stdout.empty?
+
+      abort "Working tree has uncommitted changes. Commit or stash them before running rake #{name}:prepare."
+    end
+
+    def current_branch!
+      stdout, _, status = Open3.capture3("git", "rev-parse", "--abbrev-ref", "HEAD")
+      abort "Could not determine the current git branch." unless status.success?
+      stdout.strip
+    end
+
+    def validate_pr_branch!(branch)
+      return true unless branch.empty? || branch == "HEAD" || branch == working_branch
+
+      abort "Refusing to push unsafe PR branch '#{branch}'. Run this task from the version bump branch."
     end
 
     def define
@@ -220,72 +280,67 @@ module Discharger
         version for the next release.
       DESC
       task "#{name}": [:environment] do
-        unless system("gh --version > /dev/null 2>&1")
-          abort "Error: GitHub CLI (gh) is required for the release process but was not found. Install it: https://cli.github.com"
-        end
+        require_gh!("the release process") if !auto_deploy_staging || pr_label
+        validate_pr_label!
 
         current_version = Object.const_get(version_constant)
 
         # When auto_deploy_staging is enabled, release directly from working_branch
-        # instead of staging_branch (for CI/CD pipelines that auto-deploy staging)
+        # instead of staging_branch (for CI/CD pipelines that auto-deploy staging).
         release_source = auto_deploy_staging ? working_branch : staging_branch
+
+        release_action = if auto_deploy_staging
+          "This will tag the release commit on #{working_branch} and push the tag."
+        else
+          "This will tag the current version and push it to the production branch."
+        end
 
         sysecho <<~MSG
           Releasing version #{current_version} to production.
 
-          This will tag the current version and push it to the production branch.
+          #{release_action}
           Release source: #{release_source}
         MSG
         sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
         input = $stdin.gets
         exit if input.chomp.match?(/^x/i)
 
-        syscall(
-          ["git checkout #{working_branch}"],
-          ["git branch -D #{staging_branch} 2>/dev/null || true"],
-          ["git branch -D #{production_branch} 2>/dev/null || true"]
-        )
+        syscall(["git checkout #{working_branch}"])
 
         if auto_deploy_staging
           syscall(
-            ["git fetch origin #{production_branch}:#{production_branch} #{working_branch}"],
+            ["git fetch origin #{working_branch}"],
             ["git reset --hard origin/#{working_branch}"]
           )
-          validate_release_commit!(release_source)
+          tag_ref = find_release_commit!(working_branch)
+          tag_fetch_step = nil
         else
           syscall(
+            ["git branch -D #{staging_branch} 2>/dev/null || true"],
+            ["git branch -D #{production_branch} 2>/dev/null || true"],
             ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
           )
           validate_version_match!(staging_branch, working_branch)
+          merge_release_pr!(base: production_branch, head: release_source)
+
+          tag_ref = production_branch
+          tag_fetch_step = ["git fetch origin #{production_branch}:#{production_branch}"]
         end
 
-        pr_ref = release_source
-        if auto_deploy_staging
-          pr_number = existing_pr_number(production_branch, release_source)
-          if pr_number
-            sysecho "Reusing existing PR ##{pr_number} from #{release_source} to #{production_branch}."
-            pr_ref = pr_number
-          else
-            syscall(
-              ["gh pr create --base #{production_branch} --head #{release_source} --title 'Release #{current_version}' --body 'Deploy #{current_version} to production.'"]
-            )
-          end
-        end
-
-        if pr_already_merged?(pr_ref)
-          sysecho "PR #{pr_ref} is already merged. Continuing..."
-        else
-          syscall(
-            ["gh pr merge #{pr_ref} --merge"]
-          )
-        end
+        # In auto_deploy_staging, tag_ref is a full SHA returned by
+        # find_release_commit!. Use it for the Slack message so the reported
+        # SHA always matches the tagged commit, even when origin/working_branch
+        # has advanced past the finalize commit. In the non-auto path, tag_ref
+        # is the production branch name, so we fall back to commit_identifier
+        # (which reads HEAD, which at that point is the tagged production tip).
+        slack_sha = auto_deploy_staging ? tag_ref[0, 8] : commit_identifier.call
 
         continue = syscall(
-          ["git fetch origin #{production_branch}:#{production_branch}"],
-          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{production_branch}"],
+          *[tag_fetch_step].compact,
+          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{tag_ref}"],
           ["git push origin v#{current_version}"]
         ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
+          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{slack_sha}) to production.", release_message_channel, ":chipmunk:")
           if last_message_ts.present?
             text = File.read(Rails.root.join(changelog_file))
             tasker["#{name}:slack"].reenable
@@ -305,22 +360,39 @@ module Discharger
         MSG
         tasker["reissue"].invoke
 
-        new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
+        new_version_branch = current_branch!
+        validate_pr_branch!(new_version_branch)
         new_version = new_version_branch.split("/").last
-        params = {expand: 1, title: "Bump version to #{new_version}"}
-        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
+        bump_pr_title = "Bump version to #{new_version}"
 
-        syscall(["git push origin #{new_version_branch} --force"]) do
-          sysecho <<~MSG
-            Branch #{new_version_branch} created.
+        if pr_label
+          syscall(
+            ["git push origin #{new_version_branch} --force"],
+            [
+              "gh", "pr", "create",
+              "--base", working_branch,
+              "--head", new_version_branch,
+              "--title", bump_pr_title,
+              "--body", "",
+              "--label", pr_label
+            ]
+          )
+        else
+          params = {expand: 1, title: bump_pr_title}
+          pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
 
-            Open a PR to #{working_branch} to mark the version and update the chaneglog
-            for the next release.
+          syscall(["git push origin #{new_version_branch} --force"]) do
+            sysecho <<~MSG
+              Branch #{new_version_branch} created.
 
-            Opening PR: #{pr_url}
-          MSG
-        end.then do |success|
-          syscall ["open", pr_url] if success
+              Open a PR to #{working_branch} to mark the version and update the chaneglog
+              for the next release.
+
+              Opening PR: #{pr_url}
+            MSG
+          end.then do |success|
+            syscall ["open", pr_url] if success
+          end
         end
       end
 
@@ -389,12 +461,17 @@ module Discharger
           the release.
         DESC
         task prepare: [:environment] do
+          require_gh!("PR creation") if pr_label
+          validate_pr_label!
+          ensure_clean_worktree!
+
           current_version = Object.const_get(version_constant)
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
 
           syscall(
             ["git fetch origin #{working_branch}"],
             ["git checkout #{working_branch}"],
+            ["git reset --hard origin/#{working_branch}"],
             ["git checkout -b #{finish_branch}"]
           )
           sysecho <<~MSG
@@ -411,34 +488,53 @@ module Discharger
 
           tasker["reissue:finalize"].invoke
 
-          params = {
-            expand: 1,
-            title: "Finish version #{current_version}",
-            body: <<~BODY
-              Completing development for #{current_version}.
-            BODY
-          }
-
-          pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
+          finish_pr_title = "Finish version #{current_version}"
+          finish_pr_body = "Completing development for #{current_version}."
 
           next_step = auto_deploy_staging ? "rake #{name}" : "rake #{name}:stage"
           next_step_desc = auto_deploy_staging ? "release to production" : "stage the release branch"
 
-          continue = syscall ["git push origin #{finish_branch} --force"] do
-            sysecho <<~MSG
-              Branch #{finish_branch} created.
-              Open a PR to #{working_branch} to finalize the release.
+          if pr_label
+            continue = syscall(
+              ["git push origin #{finish_branch} --force"],
+              [
+                "gh", "pr", "create",
+                "--base", working_branch,
+                "--head", finish_branch,
+                "--title", finish_pr_title,
+                "--body", finish_pr_body,
+                "--label", pr_label
+              ]
+            ) do
+              sysecho <<~MSG
+                Branch #{finish_branch} pushed and PR created with label '#{pr_label}'.
 
-              #{pr_url}
+                Once the PR is merged, pull down #{working_branch} and run
+                  '#{next_step}'
+                to #{next_step_desc}.
+              MSG
+            end
+            syscall ["git checkout #{working_branch}"] if continue
+          else
+            params = {expand: 1, title: finish_pr_title, body: finish_pr_body + "\n"}
+            pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
 
-              Once the PR is merged, pull down #{working_branch} and run
-                '#{next_step}'
-              to #{next_step_desc}.
-            MSG
-          end
-          if continue
-            syscall ["git checkout #{working_branch}"],
-              ["open", pr_url]
+            continue = syscall ["git push origin #{finish_branch} --force"] do
+              sysecho <<~MSG
+                Branch #{finish_branch} created.
+                Open a PR to #{working_branch} to finalize the release.
+
+                #{pr_url}
+
+                Once the PR is merged, pull down #{working_branch} and run
+                  '#{next_step}'
+                to #{next_step_desc}.
+              MSG
+            end
+            if continue
+              syscall ["git checkout #{working_branch}"],
+                ["open", pr_url]
+            end
           end
         end
 

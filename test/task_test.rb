@@ -1,6 +1,8 @@
 require_relative "test_helper"
 
 class DischargerTaskTest < Minitest::Test
+  TEST_VERSION = "1.2.3"
+
   def setup
     @task = Discharger::Task.new
   end
@@ -55,6 +57,28 @@ class DischargerTaskTest < Minitest::Test
     end
 
     assert_equal pattern, captured_tag_pattern
+  ensure
+    Reissue::Task.define_singleton_method(:create, original_create)
+  end
+
+  def test_create_forwards_retain_changelogs_to_reissue
+    retainer = ->(version_hash, content) { [version_hash, content] }
+    captured_retain_changelogs = nil
+
+    original_create = Reissue::Task.method(:create)
+    Reissue::Task.define_singleton_method(:create) do |name = :reissue, &block|
+      reissue_task = Reissue::Task.new(name)
+      block&.call(reissue_task)
+      captured_retain_changelogs = reissue_task.retain_changelogs
+      reissue_task
+    end
+
+    Discharger::Task.create(:test_retain_changelogs) do
+      self.version_file = "VERSION"
+      self.retain_changelogs = retainer
+    end
+
+    assert_equal retainer, captured_retain_changelogs
   ensure
     Reissue::Task.define_singleton_method(:create, original_create)
   end
@@ -125,31 +149,80 @@ class DischargerTaskTest < Minitest::Test
     end
   end
 
-  def test_validate_release_commit_success
-    sha = "abc123def456"
-
-    # Stub both methods to return same SHA
-    @task.define_singleton_method(:git_local_sha) { |_branch| sha }
-    @task.define_singleton_method(:git_version_file_commit) { |_branch| sha }
+  def test_find_release_commit_returns_sha_that_introduced_version_header
+    later_sha = "later123def456"
+    finalize_sha = "final123def456"
+    @task.changelog_file = "CHANGELOG.md"
+    @task.version_constant = "DischargerTaskTest::TEST_VERSION"
+    @task.define_singleton_method(:git_file_commits) { |_branch, _path| [later_sha, finalize_sha] }
+    @task.define_singleton_method(:git_merge_commit?) { |_sha| false }
+    @task.define_singleton_method(:git_show_at_commit) do |ref, _path|
+      case ref
+      when later_sha
+        "## [1.2.3] - 2026-04-20\n\n### Changed\n- Later edit\n"
+      when "#{later_sha}^"
+        "## [1.2.3] - 2026-04-20\n\n### Changed\n- Thing\n"
+      when finalize_sha
+        "## [1.2.3] - 2026-04-20\n\n### Changed\n- Thing\n"
+      when "#{finalize_sha}^"
+        "## [1.2.3] - Unreleased\n\n### Changed\n- Thing\n"
+      end
+    end
 
     output = StringIO.new
-    result = @task.validate_release_commit!("develop", output:)
+    result = @task.find_release_commit!("develop", output:)
 
-    assert result
-    assert_match(/HEAD is the release commit/, output.string)
+    assert_equal finalize_sha, result
+    assert_match(/Release commit/, output.string)
   end
 
-  def test_validate_release_commit_failure
-    head_sha = "abc123def456"
-    release_sha = "xyz789ghi012"
+  def test_find_release_commit_skips_merge_commit_that_looks_like_finalize
+    merge_sha = "merge123def456"
+    finalize_sha = "final123def456"
+    @task.changelog_file = "CHANGELOG.md"
+    @task.version_constant = "DischargerTaskTest::TEST_VERSION"
+    @task.define_singleton_method(:git_file_commits) { |_branch, _path| [merge_sha, finalize_sha] }
+    @task.define_singleton_method(:git_merge_commit?) { |sha| sha == merge_sha }
+    @task.define_singleton_method(:git_show_at_commit) do |ref, _path|
+      case ref
+      when merge_sha
+        "## [1.2.3] - 2026-04-20\n\n### Changed\n- Thing\n"
+      when "#{merge_sha}^"
+        "## [1.2.3] - Unreleased\n\n### Changed\n- Thing\n"
+      when finalize_sha
+        "## [1.2.3] - 2026-04-20\n\n### Changed\n- Thing\n"
+      when "#{finalize_sha}^"
+        "## [1.2.3] - Unreleased\n\n### Changed\n- Thing\n"
+      end
+    end
 
-    # Stub to return different SHAs
-    @task.define_singleton_method(:git_local_sha) { |_branch| head_sha }
-    @task.define_singleton_method(:git_version_file_commit) { |_branch| release_sha }
-    @task.version_file = "VERSION"
+    output = StringIO.new
+    result = @task.find_release_commit!("develop", output:)
+
+    assert_equal finalize_sha, result
+  end
+
+  def test_find_release_commit_aborts_when_no_commit_touches_changelog
+    @task.changelog_file = "CHANGELOG.md"
+    @task.version_constant = "DischargerTaskTest::TEST_VERSION"
+    @task.define_singleton_method(:git_file_commits) { |_branch, _path| [] }
 
     assert_raises(SystemExit) do
-      capture_io { @task.validate_release_commit!("develop") }
+      capture_io { @task.find_release_commit!("develop") }
+    end
+  end
+
+  def test_find_release_commit_aborts_when_version_header_missing
+    @task.changelog_file = "CHANGELOG.md"
+    @task.version_constant = "DischargerTaskTest::TEST_VERSION"
+    @task.define_singleton_method(:git_file_commits) { |_branch, _path| ["abc123def456"] }
+    @task.define_singleton_method(:git_merge_commit?) { |_sha| false }
+    @task.define_singleton_method(:git_show_at_commit) do |_ref, _path|
+      "## [9.9.9] - 2020-01-01\n\n### Changed\n- Old thing\n"
+    end
+
+    assert_raises(SystemExit) do
+      capture_io { @task.find_release_commit!("develop") }
     end
   end
 
@@ -157,13 +230,33 @@ class DischargerTaskTest < Minitest::Test
     @task.auto_deploy_staging = true
     assert_equal true, @task.auto_deploy_staging
   end
+
+  def test_validate_pr_branch_accepts_bump_branch
+    assert @task.validate_pr_branch!("bump/next-1-2-4")
+  end
+
+  def test_validate_pr_branch_rejects_detached_head
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_pr_branch!("HEAD") }
+    end
+  end
+
+  def test_validate_pr_branch_rejects_working_branch
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_pr_branch!("develop") }
+    end
+  end
 end
 
 class DischargerReleaseCommandSequenceTest < Minitest::Test
   FAKE_VERSION = "1.2.3"
+  FakeStatus = Struct.new(:ok) do
+    def success? = ok
+  end
 
   def setup
     @commands = []
+    @slack_invocations = []
     @original_stdin = $stdin
     Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
   end
@@ -172,9 +265,12 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     $stdin = @original_stdin
   end
 
-  def build_task(name, auto_deploy:)
+  FAKE_RELEASE_SHA = "fakeReleaseSha0"
+
+  def build_task(name, auto_deploy:, pr_label: nil)
+    slack_invocations = @slack_invocations
     noop_task = Object.new
-    noop_task.define_singleton_method(:invoke) { |*_args| }
+    noop_task.define_singleton_method(:invoke) { |*args| slack_invocations << args }
     noop_task.define_singleton_method(:reenable) {}
     mock_tasker = Object.new
     mock_tasker.define_singleton_method(:[]) { |_name| noop_task }
@@ -189,17 +285,23 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.app_name = "TestApp"
     task.commit_identifier = -> { "abc123" }
     task.auto_deploy_staging = auto_deploy
+    task.pr_label = pr_label
 
     commands = @commands
-    task.define_singleton_method(:syscall) do |*steps, **_kwargs, &_block|
+    task.define_singleton_method(:syscall) do |*steps, **_kwargs, &block|
       steps.each { |cmd| commands << cmd }
+      block&.call("", "", FakeStatus.new(true))
       true
     end
+    task.define_singleton_method(:system) { |*_args| true }
     task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
-    task.define_singleton_method(:validate_release_commit!) { |*_args, **_kwargs| true }
-    task.define_singleton_method(:existing_pr_number) { |*_args| nil }
-    task.define_singleton_method(:pr_already_merged?) { |_ref| false }
+    task.define_singleton_method(:validate_pr_label!) { true }
+    task.define_singleton_method(:ensure_clean_worktree!) { true }
+    task.define_singleton_method(:current_branch!) { "bump/next-1-2-4" }
+    task.define_singleton_method(:existing_pr_number) { |_base, _head, state: "open"| (state == "open") ? "42" : nil }
+    task.define_singleton_method(:git_ancestor?) { |_ancestor, _descendant| false }
+    task.define_singleton_method(:find_release_commit!) { |_branch, **_kwargs| FAKE_RELEASE_SHA }
 
     task
   end
@@ -220,8 +322,8 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
 
     refute command_issued?(/gh pr create/),
       "Standard mode should not create a PR"
-    assert command_issued?("gh pr merge stage --merge"),
-      "Should merge staging branch"
+    assert command_issued?("gh pr merge 42 --merge"),
+      "Should merge the open staging PR by number"
     assert command_issued?(/git tag -a v1\.2\.3 .+ main/),
       "Should tag production branch"
     assert command_issued?("git push origin v1.2.3"),
@@ -230,46 +332,51 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should fetch staging and production branches"
   end
 
-  def test_auto_deploy_mode_creates_pr_then_merges_working_branch
+  def test_auto_deploy_mode_tags_release_commit_directly
     task = build_task(:rel_auto_seq, auto_deploy: true)
     task.define
     $stdin = StringIO.new("\n")
 
     capture_io { Rake::Task["rel_auto_seq"].invoke }
 
-    assert command_issued?(/gh pr create --base main --head develop/),
-      "Auto-deploy should create PR from working branch to production"
-    assert command_issued?("gh pr merge develop --merge"),
-      "Auto-deploy should merge working branch (not staging)"
-    assert command_issued?(/git tag -a v1\.2\.3 .+ main/),
-      "Should tag production branch"
-    assert command_issued?("git push origin v1.2.3"),
-      "Should push the tag"
-    assert command_issued?("git fetch origin main:main develop"),
-      "Should fetch production branch and working branch tracking ref"
+    refute command_issued?(/gh pr create/),
+      "Auto-deploy should not create a production PR"
+    refute command_issued?(/gh pr merge/),
+      "Auto-deploy should not merge a production PR"
+    assert command_issued?("git fetch origin develop"),
+      "Auto-deploy should fetch working branch only"
+    refute command_issued?(/main:main/),
+      "Auto-deploy should not fetch the production branch"
     assert command_issued?("git reset --hard origin/develop"),
       "Should reset working branch to match remote"
+    assert command_issued?(/git tag -a v1\.2\.3 .+ #{FAKE_RELEASE_SHA}/o),
+      "Should tag the computed release commit SHA (not production branch)"
+    assert command_issued?("git push origin v1.2.3"),
+      "Should push the tag"
+    refute command_issued?(/git branch -D (stage|main)/),
+      "Auto-deploy should not clean up production/staging local branches"
   end
 
-  def test_auto_deploy_mode_pr_create_precedes_merge
-    task = build_task(:rel_order_seq, auto_deploy: true)
+  def test_auto_deploy_mode_slack_message_reports_tagged_sha
+    task = build_task(:rel_slack_sha, auto_deploy: true)
     task.define
     $stdin = StringIO.new("\n")
 
-    capture_io { Rake::Task["rel_order_seq"].invoke }
+    capture_io { Rake::Task["rel_slack_sha"].invoke }
 
-    create_idx = @commands.index { |c| c.join(" ").match?(/gh pr create/) }
-    merge_idx = @commands.index { |c| c.join(" ").match?(/gh pr merge/) }
-
-    assert create_idx, "Expected gh pr create command"
-    assert merge_idx, "Expected gh pr merge command"
-    assert_operator create_idx, :<, merge_idx,
-      "PR create must precede PR merge"
+    released = @slack_invocations.find { |args| args.first.to_s.start_with?("Released") }
+    assert released, "Expected a 'Released ...' Slack invocation"
+    message = released.first
+    assert_includes message, FAKE_RELEASE_SHA[0, 8],
+      "Slack message must report the tagged commit SHA (tag_ref[0, 8])"
+    refute_includes message, "abc123",
+      "Slack message must not report commit_identifier SHA (HEAD-based) in auto_deploy mode"
   end
 
-  def test_standard_mode_skips_merge_when_pr_already_merged
+  def test_standard_mode_skips_merge_when_source_already_in_production
     task = build_task(:rel_merged_seq, auto_deploy: false)
-    task.define_singleton_method(:pr_already_merged?) { |_ref| true }
+    task.define_singleton_method(:existing_pr_number) { |_base, _head, state: "open"| nil }
+    task.define_singleton_method(:git_ancestor?) { |_ancestor, _descendant| true }
     task.define
     $stdin = StringIO.new("\n")
 
@@ -283,22 +390,76 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should still push the tag"
   end
 
-  def test_auto_deploy_mode_reuses_existing_pr
-    task = build_task(:rel_reuse_seq, auto_deploy: true)
-    task.define_singleton_method(:existing_pr_number) { |*_args| "42" }
+  def test_prepare_resets_working_branch_to_origin_before_branching
+    task = build_task(:rel_prepare_sync, auto_deploy: true)
     task.define
     $stdin = StringIO.new("\n")
 
-    capture_io { Rake::Task["rel_reuse_seq"].invoke }
+    capture_io { Rake::Task["rel_prepare_sync:prepare"].invoke }
 
-    refute command_issued?(/gh pr create/),
-      "Should not create a PR when one already exists"
-    assert command_issued?("gh pr merge 42 --merge"),
-      "Should merge by PR number when reusing an existing PR"
+    fetch_idx = @commands.index { |c| c.join(" ") == "git fetch origin develop" }
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+    branch_idx = @commands.index { |c| c.join(" ").match?(/^git checkout -b bump\/finish-/) }
+
+    assert fetch_idx, "Expected fetch of origin working_branch"
+    assert reset_idx, "Expected reset --hard origin/working_branch before branching"
+    assert branch_idx, "Expected creation of bump/finish branch"
+    assert_operator fetch_idx, :<, reset_idx, "Fetch must precede reset"
+    assert_operator reset_idx, :<, branch_idx,
+      "Reset must precede new branch creation so bump branch starts from latest origin state"
+  end
+
+  def test_prepare_uses_gh_pr_create_with_label_when_pr_label_set
+    task = build_task(:rel_prep_label, auto_deploy: true, pr_label: "no-changelog-needed")
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prep_label:prepare"].invoke }
+
+    gh_create = @commands.find { |c| c.first == "gh" && c[1] == "pr" && c[2] == "create" }
+    assert gh_create, "Expected gh pr create invocation when pr_label is set"
+    assert_includes gh_create, "--label"
+    assert_includes gh_create, "no-changelog-needed"
+    assert_includes gh_create, "--base"
+    assert_includes gh_create, "develop"
+    assert_includes gh_create, "--head"
+    assert(gh_create.any? { |arg| arg.match?(/^bump\/finish-/) }, "Head should be the finish branch")
+
+    refute(@commands.any? { |c| c.first == "open" },
+      "Should not open browser URL when pr_label triggers gh-based PR creation")
+  end
+
+  def test_prepare_keeps_open_flow_when_pr_label_unset
+    task = build_task(:rel_prep_open, auto_deploy: true)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prep_open:prepare"].invoke }
+
+    refute(@commands.any? { |c| c.first == "gh" && c[1] == "pr" && c[2] == "create" },
+      "Should not invoke gh pr create when pr_label is nil")
+    assert(@commands.any? { |c| c.first == "open" },
+      "Should fall back to opening compare URL when pr_label is nil")
+  end
+
+  def test_release_uses_gh_pr_create_with_label_for_bump_pr_when_pr_label_set
+    task = build_task(:rel_label, auto_deploy: true, pr_label: "no-changelog-needed")
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_label"].invoke }
+
+    bump_pr_create = @commands.find { |c|
+      c.first == "gh" && c[1] == "pr" && c[2] == "create" &&
+        c.include?("--title") && c[c.index("--title") + 1].to_s.start_with?("Bump version")
+    }
+    assert bump_pr_create, "Expected gh pr create for bump version PR when pr_label is set"
+    assert_includes bump_pr_create, "--label"
+    assert_includes bump_pr_create, "no-changelog-needed"
   end
 end
 
-class DischargerPrAlreadyMergedTest < Minitest::Test
+class DischargerReleasePreconditionTest < Minitest::Test
   FakeStatus = Struct.new(:ok) do
     def success? = ok
   end
@@ -317,19 +478,38 @@ class DischargerPrAlreadyMergedTest < Minitest::Test
     Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
   end
 
-  def test_returns_true_when_pr_is_merged
-    stub_capture3("MERGED\n", "", true)
-    assert @task.pr_already_merged?("stage")
+  def test_validate_pr_label_returns_true_without_label
+    assert @task.validate_pr_label!
   end
 
-  def test_returns_false_when_pr_is_open
-    stub_capture3("OPEN\n", "", true)
-    refute @task.pr_already_merged?("stage")
+  def test_validate_pr_label_checks_configured_label
+    @task.pr_label = "no-changelog-needed"
+    stub_capture3("", "", true)
+
+    assert @task.validate_pr_label!
   end
 
-  def test_returns_false_on_command_failure
-    stub_capture3("", "error", false)
-    refute @task.pr_already_merged?("stage")
+  def test_validate_pr_label_aborts_when_label_is_missing
+    @task.pr_label = "no-changelog-needed"
+    stub_capture3("", "not found", false)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_pr_label! }
+    end
+  end
+
+  def test_ensure_clean_worktree_allows_clean_checkout
+    stub_capture3("", "", true)
+
+    assert @task.ensure_clean_worktree!
+  end
+
+  def test_ensure_clean_worktree_aborts_on_dirty_checkout
+    stub_capture3(" M CHANGELOG.md\n", "", true)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.ensure_clean_worktree! }
+    end
   end
 end
 
@@ -354,16 +534,16 @@ class DischargerExistingPrNumberTest < Minitest::Test
 
   def test_returns_pr_number_when_pr_exists
     stub_capture3("42\n", "", true)
-    assert_equal "42", @task.existing_pr_number("main", "develop")
+    assert_equal "42", @task.existing_pr_number("main", "stage")
   end
 
   def test_returns_nil_when_no_pr_exists
     stub_capture3("", "", true)
-    assert_nil @task.existing_pr_number("main", "develop")
+    assert_nil @task.existing_pr_number("main", "stage")
   end
 
   def test_returns_nil_on_command_failure
     stub_capture3("", "error", false)
-    assert_nil @task.existing_pr_number("main", "develop")
+    assert_nil @task.existing_pr_number("main", "stage")
   end
 end
