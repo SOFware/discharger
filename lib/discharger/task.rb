@@ -90,28 +90,23 @@ module Discharger
     #     ["ls -l"]
     #   )
     def syscall(*steps, output: $stdout, error: $stderr)
-      success = false
       stdout, stderr, status = nil
       steps.each do |cmd|
         puts cmd.join(" ").bg(:green).black
         stdout, stderr, status = Open3.capture3(*cmd)
-        if status.success?
-          output.puts stdout
-          success = true
-        else
+        unless status.success?
           error.puts stderr
-          success = false
           exit(status.exitstatus)
         end
+        output.puts stdout
       end
-      if block_given?
-        success = !!yield(stdout, stderr, status)
-        # If the error reports that a rule was bypassed, consider the command successful
-        # because we are bypassing the rule intentionally when merging the release branch
-        # to the production branch.
-        success = true if stderr.match?(/bypassed rule violations/i)
-        abort(stderr) unless success
-      end
+      return true unless block_given?
+
+      success = !!yield(stdout, stderr, status)
+      # Bypassed branch-protection rules are intentional when merging the release
+      # branch into production, so treat the command as successful.
+      success = true if stderr.match?(/bypassed rule violations/i)
+      abort(stderr) unless success
       success
     end
 
@@ -187,6 +182,11 @@ module Discharger
     def git_ancestor?(ancestor, descendant)
       _, _, status = Open3.capture3("git", "merge-base", "--is-ancestor", ancestor, descendant)
       status.success?
+    end
+
+    def delete_local_branch(branch)
+      Open3.capture3("git", "branch", "-D", branch)
+      true
     end
 
     def git_show_at_commit(sha, path)
@@ -305,44 +305,38 @@ module Discharger
         input = $stdin.gets
         exit if input.chomp.match?(/^x/i)
 
-        syscall(["git checkout #{working_branch}"])
+        syscall(["git", "checkout", working_branch])
 
+        tag_steps = []
         if auto_deploy_staging
           syscall(
-            ["git fetch origin #{working_branch}"],
-            ["git reset --hard origin/#{working_branch}"]
+            ["git", "fetch", "origin", working_branch],
+            ["git", "reset", "--hard", "origin/#{working_branch}"]
           )
+          # tag_ref is the full SHA of the finalize commit, even if origin/working_branch
+          # has since advanced. The non-auto path tags the production branch ref instead.
           tag_ref = find_release_commit!(working_branch)
-          tag_fetch_step = nil
         else
+          delete_local_branch(staging_branch)
+          delete_local_branch(production_branch)
           syscall(
-            ["git branch -D #{staging_branch} 2>/dev/null || true"],
-            ["git branch -D #{production_branch} 2>/dev/null || true"],
-            ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
+            ["git", "fetch", "origin", "#{release_source}:#{release_source}", "#{production_branch}:#{production_branch}"]
           )
           validate_version_match!(staging_branch, working_branch)
           merge_release_pr!(base: production_branch, head: release_source)
 
           tag_ref = production_branch
-          tag_fetch_step = ["git fetch origin #{production_branch}:#{production_branch}"]
+          tag_steps << ["git", "fetch", "origin", "#{production_branch}:#{production_branch}"]
         end
 
-        # In auto_deploy_staging, tag_ref is a full SHA returned by
-        # find_release_commit!. Use it for the Slack message so the reported
-        # SHA always matches the tagged commit, even when origin/working_branch
-        # has advanced past the finalize commit. In the non-auto path, tag_ref
-        # is the production branch name, so we fall back to commit_identifier
-        # (which reads HEAD, which at that point is the tagged production tip).
         slack_sha = auto_deploy_staging ? tag_ref[0, 8] : commit_identifier.call
+        tag_steps << ["git", "tag", "-a", "v#{current_version}", "-m", "Release #{current_version}", tag_ref]
+        tag_steps << ["git", "push", "origin", "v#{current_version}"]
 
-        continue = syscall(
-          *[tag_fetch_step].compact,
-          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{tag_ref}"],
-          ["git push origin v#{current_version}"]
-        ) do
+        continue = syscall(*tag_steps) do
           tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{slack_sha}) to production.", release_message_channel, ":chipmunk:")
           if last_message_ts.present?
-            text = File.read(Rails.root.join(changelog_file))
+            text = File.read(changelog_file)
             tasker["#{name}:slack"].reenable
             tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
           end
@@ -367,7 +361,7 @@ module Discharger
 
         if pr_label
           syscall(
-            ["git push origin #{new_version_branch} --force"],
+            ["git", "push", "origin", new_version_branch, "--force"],
             [
               "gh", "pr", "create",
               "--base", working_branch,
@@ -381,18 +375,17 @@ module Discharger
           params = {expand: 1, title: bump_pr_title}
           pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
 
-          syscall(["git push origin #{new_version_branch} --force"]) do
+          pushed = syscall(["git", "push", "origin", new_version_branch, "--force"]) do
             sysecho <<~MSG
               Branch #{new_version_branch} created.
 
-              Open a PR to #{working_branch} to mark the version and update the chaneglog
+              Open a PR to #{working_branch} to mark the version and update the changelog
               for the next release.
 
               Opening PR: #{pr_url}
             MSG
-          end.then do |success|
-            syscall ["open", pr_url] if success
           end
+          syscall ["open", pr_url] if pushed
         end
       end
 
@@ -418,17 +411,17 @@ module Discharger
           # Allow overriding the working branch via environment variable
           build_branch = ENV["DISCHARGER_BUILD_BRANCH"] || working_branch
 
+          delete_local_branch(staging_branch)
           syscall(
-            ["git fetch origin #{build_branch}"],
-            ["git checkout #{build_branch}"],
-            ["git reset --hard origin/#{build_branch}"],
-            ["git branch -D #{staging_branch} 2>/dev/null || true"],
-            ["git checkout -b #{staging_branch}"],
-            ["git push origin #{staging_branch} --force"]
+            ["git", "fetch", "origin", build_branch],
+            ["git", "checkout", build_branch],
+            ["git", "reset", "--hard", "origin/#{build_branch}"],
+            ["git", "checkout", "-b", staging_branch],
+            ["git", "push", "origin", staging_branch, "--force"]
           ) do
             current_version = Object.const_get(version_constant)
             tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
-            syscall ["git checkout #{build_branch}"]
+            syscall ["git", "checkout", build_branch]
           end
         end
 
@@ -469,10 +462,10 @@ module Discharger
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
 
           syscall(
-            ["git fetch origin #{working_branch}"],
-            ["git checkout #{working_branch}"],
-            ["git reset --hard origin/#{working_branch}"],
-            ["git checkout -b #{finish_branch}"]
+            ["git", "fetch", "origin", working_branch],
+            ["git", "checkout", working_branch],
+            ["git", "reset", "--hard", "origin/#{working_branch}"],
+            ["git", "checkout", "-b", finish_branch]
           )
           sysecho <<~MSG
             Branch #{finish_branch} created.
@@ -496,7 +489,7 @@ module Discharger
 
           if pr_label
             continue = syscall(
-              ["git push origin #{finish_branch} --force"],
+              ["git", "push", "origin", finish_branch, "--force"],
               [
                 "gh", "pr", "create",
                 "--base", working_branch,
@@ -514,12 +507,12 @@ module Discharger
                 to #{next_step_desc}.
               MSG
             end
-            syscall ["git checkout #{working_branch}"] if continue
+            syscall ["git", "checkout", working_branch] if continue
           else
             params = {expand: 1, title: finish_pr_title, body: finish_pr_body + "\n"}
             pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
 
-            continue = syscall ["git push origin #{finish_branch} --force"] do
+            continue = syscall ["git", "push", "origin", finish_branch, "--force"] do
               sysecho <<~MSG
                 Branch #{finish_branch} created.
                 Open a PR to #{working_branch} to finalize the release.
@@ -532,7 +525,7 @@ module Discharger
               MSG
             end
             if continue
-              syscall ["git checkout #{working_branch}"],
+              syscall ["git", "checkout", working_branch],
                 ["open", pr_url]
             end
           end

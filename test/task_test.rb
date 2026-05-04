@@ -295,6 +295,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     end
     task.define_singleton_method(:system) { |*_args| true }
     task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:delete_local_branch) { |branch| commands << ["git", "branch", "-D", branch] }
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:validate_pr_label!) { true }
     task.define_singleton_method(:ensure_clean_worktree!) { true }
@@ -511,38 +512,18 @@ class DischargerReleasePreconditionTest < Minitest::Test
       capture_io { @task.ensure_clean_worktree! }
     end
   end
-end
 
-class DischargerExistingPrNumberTest < Minitest::Test
-  FakeStatus = Struct.new(:ok) do
-    def success? = ok
-  end
-
-  def setup
-    @task = Discharger::Task.new
-    @original_capture3 = Open3.method(:capture3)
-  end
-
-  def teardown
-    Open3.define_singleton_method(:capture3, @original_capture3)
-  end
-
-  def stub_capture3(stdout, stderr, success)
-    status = FakeStatus.new(success)
-    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
-  end
-
-  def test_returns_pr_number_when_pr_exists
+  def test_existing_pr_number_returns_pr_number_when_pr_exists
     stub_capture3("42\n", "", true)
     assert_equal "42", @task.existing_pr_number("main", "stage")
   end
 
-  def test_returns_nil_when_no_pr_exists
+  def test_existing_pr_number_returns_nil_when_no_pr_exists
     stub_capture3("", "", true)
     assert_nil @task.existing_pr_number("main", "stage")
   end
 
-  def test_returns_nil_on_command_failure
+  def test_existing_pr_number_returns_nil_on_command_failure
     stub_capture3("", "error", false)
     assert_nil @task.existing_pr_number("main", "stage")
   end
