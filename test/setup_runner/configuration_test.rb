@@ -108,6 +108,7 @@ class DatabaseConfigTest < ActiveSupport::TestCase
     assert_equal "db-app", config.name
     assert_equal "14", config.version
     assert_equal "postgres", config.password
+    assert_nil config.prefer_docker
   end
 
   test "updates from hash" do
@@ -135,6 +136,27 @@ class DatabaseConfigTest < ActiveSupport::TestCase
     assert_equal "db-app", config.name  # unchanged
     assert_equal "14", config.version    # unchanged
     assert_equal "postgres", config.password  # unchanged
+  end
+
+  test "from_hash reads prefer_docker when set to true" do
+    config = Discharger::SetupRunner::DatabaseConfig.new
+    config.from_hash({"prefer_docker" => true})
+
+    assert_equal true, config.prefer_docker
+  end
+
+  test "from_hash reads prefer_docker when set to prompt" do
+    config = Discharger::SetupRunner::DatabaseConfig.new
+    config.from_hash({"prefer_docker" => "prompt"})
+
+    assert_equal "prompt", config.prefer_docker
+  end
+
+  test "from_hash reads prefer_docker when explicitly false" do
+    config = Discharger::SetupRunner::DatabaseConfig.new
+    config.from_hash({"prefer_docker" => false})
+
+    assert_equal false, config.prefer_docker
   end
 end
 

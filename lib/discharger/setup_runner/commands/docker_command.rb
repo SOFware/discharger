@@ -7,35 +7,8 @@ module Discharger
     module Commands
       class DockerCommand < BaseCommand
         def execute
-          # Setup database container if configured
-          if database_configured?
-            puts "  → Checking database configuration..." unless ENV["QUIET_SETUP"]
-            if native_postgresql_available?
-              puts "  → Native PostgreSQL detected on port #{native_postgresql_port}, skipping Docker setup" unless ENV["QUIET_SETUP"]
-              ENV["DB_PORT"] ||= native_postgresql_port.to_s
-            else
-              puts "  → No native PostgreSQL found, setting up Docker container..." unless ENV["QUIET_SETUP"]
-              ensure_docker_running
-              setup_container(
-                name: database_config.name || "db-app",
-                port: database_config.port || 5432,
-                image: "postgres:#{database_config.version || "14"}",
-                env: {"POSTGRES_PASSWORD" => database_config.password || "postgres"},
-                volume: "#{database_config.name || "db-app"}:/var/lib/postgresql/data",
-                internal_port: 5432
-              )
-            end
-          end
-
-          # Setup Redis container if configured
-          if redis_configured?
-            setup_container(
-              name: redis_config.name || "redis-app",
-              port: redis_config.port || 6379,
-              image: "redis:#{redis_config.version || "latest"}",
-              internal_port: 6379
-            )
-          end
+          setup_database if database_configured?
+          setup_redis if redis_configured?
         end
 
         def can_execute?
@@ -48,6 +21,84 @@ module Discharger
         end
 
         private
+
+        def setup_database
+          puts "  → Checking database configuration..." unless ENV["QUIET_SETUP"]
+
+          case database_config.prefer_docker
+          when true
+            create_database_container_or_fail
+          when "prompt"
+            if native_postgresql_available? && wants_native_postgresql?
+              use_native_postgresql
+            else
+              create_database_container_or_fail
+            end
+          else
+            # Legacy default: prefer the native instance when one is available.
+            if native_postgresql_available?
+              use_native_postgresql
+            else
+              create_database_container
+            end
+          end
+        end
+
+        def setup_redis
+          setup_container(
+            name: redis_config.name || "redis-app",
+            port: redis_config.port || 6379,
+            image: "redis:#{redis_config.version || "latest"}",
+            internal_port: 6379
+          )
+        end
+
+        def use_native_postgresql
+          puts "  → Native PostgreSQL detected on port #{native_postgresql_port}, skipping Docker setup" unless ENV["QUIET_SETUP"]
+          ENV["DB_PORT"] ||= native_postgresql_port.to_s
+        end
+
+        def create_database_container_or_fail
+          if native_postgresql_available?
+            raise "prefer_docker is set in the database config but native PostgreSQL is " \
+                  "listening on port #{native_postgresql_port}. Stop the native instance " \
+                  "(e.g., `brew services stop postgresql@15`) or remove prefer_docker."
+          end
+          create_database_container
+        end
+
+        def create_database_container
+          puts "  → No native PostgreSQL found, setting up Docker container..." unless ENV["QUIET_SETUP"]
+          ensure_docker_running
+          setup_container(
+            name: database_config.name || "db-app",
+            port: database_config.port || 5432,
+            image: "postgres:#{database_config.version || "14"}",
+            env: {"POSTGRES_PASSWORD" => database_config.password || "postgres"},
+            volume: "#{database_config.name || "db-app"}:/var/lib/postgresql/data",
+            internal_port: 5432
+          )
+        end
+
+        # Ask the developer whether to use the detected native PostgreSQL or set up
+        # the configured Docker container instead. Falls back to native (the legacy
+        # behavior) when stdin is not a TTY, in CI, or when QUIET_SETUP is set,
+        # so non-interactive runs do not hang waiting for input.
+        def wants_native_postgresql?
+          unless interactive_prompt_available?
+            puts "  → Non-interactive shell; defaulting to native PostgreSQL on port #{native_postgresql_port}" unless ENV["QUIET_SETUP"]
+            return true
+          end
+
+          puts "Native PostgreSQL detected on port #{native_postgresql_port}. Use the Docker container anyway?\n ===> Type Y to set up the Docker container\nOtherwise hit any key to use the native PostgreSQL."
+          $stdin.gets&.chomp != "Y"
+        end
+
+        def interactive_prompt_available?
+          return true if ENV["DISCHARGER_FORCE_INTERACTIVE"]
+          return false if ENV["CI"] || ENV["QUIET_SETUP"]
+          $stdin.tty?
+        end
 
         def setup_container(name:, port:, image:, internal_port:, env: {}, volume: nil)
           log "Checking #{name} container"
