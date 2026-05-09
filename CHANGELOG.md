@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.3.1] - Unreleased
 
+### Fixed
+
+- Reshim asdf after `corepack enable` so `yarn install` succeeds without manual `asdf reshim nodejs` when nodejs is asdf-managed
+
 ## [0.2.31] - 2026-04-09
 
 ### Added

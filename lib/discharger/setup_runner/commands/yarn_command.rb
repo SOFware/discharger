@@ -14,6 +14,14 @@ module Discharger
             if system_quiet("which corepack")
               system! "corepack enable"
 
+              # corepack enable drops yarn into the active nodejs install. When asdf
+              # manages nodejs, the existing yarn shim caches which nodejs versions
+              # provide yarn and won't see the new one until shims are regenerated.
+              if system_quiet("which asdf")
+                log "Refreshing asdf shims after corepack enable"
+                system_quiet "asdf reshim nodejs"
+              end
+
               package_json_path = File.join(app_root, "package.json")
               if File.exist?(package_json_path)
                 begin
