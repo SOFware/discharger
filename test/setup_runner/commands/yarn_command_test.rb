@@ -54,6 +54,69 @@ class YarnCommandTest < ActiveSupport::TestCase
     assert_includes commands_run, "yarn install"
   end
 
+  test "execute reshims asdf after corepack enable when asdf is installed" do
+    create_file("package.json", '{"name": "test-app"}')
+    create_file("yarn.lock", "# yarn lockfile v1")
+
+    quiet_commands = []
+    bang_commands = []
+
+    @command.define_singleton_method(:system_quiet) do |cmd|
+      quiet_commands << cmd
+      case cmd
+      when "which corepack", "which asdf"
+        true
+      when "yarn check --check-files > /dev/null 2>&1"
+        false
+      else
+        true
+      end
+    end
+
+    @command.define_singleton_method(:system!) do |*args|
+      bang_commands << args.join(" ")
+    end
+
+    @command.execute
+
+    assert_includes bang_commands, "corepack enable"
+    assert_includes quiet_commands, "asdf reshim nodejs"
+    asdf_check_index = quiet_commands.index("which asdf")
+    reshim_index = quiet_commands.index("asdf reshim nodejs")
+    assert asdf_check_index < reshim_index, "which asdf must precede asdf reshim nodejs"
+  end
+
+  test "execute skips asdf reshim when asdf is not installed" do
+    create_file("package.json", '{"name": "test-app"}')
+    create_file("yarn.lock", "# yarn lockfile v1")
+
+    quiet_commands = []
+    bang_commands = []
+
+    @command.define_singleton_method(:system_quiet) do |cmd|
+      quiet_commands << cmd
+      case cmd
+      when "which corepack"
+        true
+      when "which asdf"
+        false
+      when "yarn check --check-files > /dev/null 2>&1"
+        false
+      else
+        true
+      end
+    end
+
+    @command.define_singleton_method(:system!) do |*args|
+      bang_commands << args.join(" ")
+    end
+
+    @command.execute
+
+    assert_includes bang_commands, "corepack enable"
+    refute_includes quiet_commands, "asdf reshim nodejs"
+  end
+
   test "execute skips yarn install when yarn check succeeds" do
     create_file("package.json", '{"name": "test-app"}')
     create_file("yarn.lock", "# yarn lockfile v1")
