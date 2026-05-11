@@ -299,6 +299,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:validate_pr_label!) { true }
     task.define_singleton_method(:ensure_clean_worktree!) { true }
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch| true }
     task.define_singleton_method(:current_branch!) { "bump/next-1-2-4" }
     task.define_singleton_method(:existing_pr_number) { |_base, _head, state: "open"| (state == "open") ? "42" : nil }
     task.define_singleton_method(:git_ancestor?) { |_ancestor, _descendant| false }
@@ -410,6 +411,87 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Reset must precede new branch creation so bump branch starts from latest origin state"
   end
 
+  def test_prepare_checks_ahead_state_after_fetch_before_reset
+    task = build_task(:rel_prepare_ahead, auto_deploy: true)
+    ahead_checks = []
+    task.define_singleton_method(:ensure_branch_not_ahead!) do |branch|
+      ahead_checks << @commands.size
+      true
+    end
+    task.instance_variable_set(:@commands, @commands)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prepare_ahead:prepare"].invoke }
+
+    fetch_idx = @commands.index { |c| c.join(" ") == "git fetch origin develop" }
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+
+    assert_equal 1, ahead_checks.size, "Should invoke ensure_branch_not_ahead! once"
+    assert_operator fetch_idx, :<, ahead_checks.first, "Fetch must precede ahead-check"
+    assert_operator ahead_checks.first, :<=, reset_idx, "Ahead-check must precede reset"
+  end
+
+  def test_release_auto_deploy_checks_ahead_state_before_reset
+    task = build_task(:rel_auto_ahead, auto_deploy: true)
+    ahead_checks = []
+    task.define_singleton_method(:ensure_branch_not_ahead!) do |branch|
+      ahead_checks << @commands.size
+      true
+    end
+    task.instance_variable_set(:@commands, @commands)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_auto_ahead"].invoke }
+
+    fetch_idx = @commands.index { |c| c.join(" ") == "git fetch origin develop" }
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+
+    assert ahead_checks.any?, "Should invoke ensure_branch_not_ahead! in auto-deploy release"
+    assert_operator fetch_idx, :<, ahead_checks.first, "Fetch must precede ahead-check"
+    assert_operator ahead_checks.first, :<=, reset_idx, "Ahead-check must precede reset"
+  end
+
+  def test_release_auto_deploy_checks_clean_worktree_before_reset
+    task = build_task(:rel_auto_clean, auto_deploy: true)
+    clean_calls = []
+    task.define_singleton_method(:ensure_clean_worktree!) do
+      clean_calls << @commands.size
+      true
+    end
+    task.instance_variable_set(:@commands, @commands)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_auto_clean"].invoke }
+
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+
+    assert clean_calls.any?, "Should invoke ensure_clean_worktree! in auto-deploy release"
+    assert_operator clean_calls.first, :<=, reset_idx, "Clean-worktree check must precede reset"
+  end
+
+  def test_release_build_checks_out_build_branch_before_deleting_staging
+    task = build_task(:rel_build_order, auto_deploy: false)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_build_order:build"].invoke }
+
+    checkout_build_idx = @commands.index { |c| c.join(" ") == "git checkout develop" }
+    delete_stage_idx = @commands.index { |c| c.join(" ") == "git branch -D stage" }
+    create_stage_idx = @commands.index { |c| c.join(" ") == "git checkout -b stage" }
+
+    assert checkout_build_idx, "Expected checkout of build_branch"
+    assert delete_stage_idx, "Expected delete of staging local branch"
+    assert create_stage_idx, "Expected creation of staging branch"
+    assert_operator checkout_build_idx, :<, delete_stage_idx,
+      "Must checkout build_branch before deleting staging — else delete fails when on staging"
+    assert_operator delete_stage_idx, :<, create_stage_idx,
+      "Must delete staging before recreating it"
+  end
+
   def test_prepare_uses_gh_pr_create_with_label_when_pr_label_set
     task = build_task(:rel_prep_label, auto_deploy: true, pr_label: "no-changelog-needed")
     task.define
@@ -510,6 +592,19 @@ class DischargerReleasePreconditionTest < Minitest::Test
 
     assert_raises(SystemExit) do
       capture_io { @task.ensure_clean_worktree! }
+    end
+  end
+
+  def test_ensure_branch_not_ahead_passes_when_count_is_zero
+    stub_capture3("0\n", "", true)
+    assert @task.ensure_branch_not_ahead!("develop")
+  end
+
+  def test_ensure_branch_not_ahead_aborts_when_local_has_unpushed_commits
+    stub_capture3("3\n", "", true)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.ensure_branch_not_ahead!("develop") }
     end
   end
 

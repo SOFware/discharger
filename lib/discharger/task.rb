@@ -251,6 +251,20 @@ module Discharger
       abort "Working tree has uncommitted changes. Commit or stash them before running rake #{name}:prepare."
     end
 
+    # Abort if the local branch has commits not present on origin/<branch>.
+    # Run after fetching to make the comparison meaningful. Prevents `git reset
+    # --hard origin/<branch>` from silently discarding unpushed work.
+    def ensure_branch_not_ahead!(branch)
+      stdout, _, status = Open3.capture3("git", "rev-list", "--count", "origin/#{branch}..#{branch}")
+      return true if status.success? && stdout.strip == "0"
+
+      abort <<~ERROR.bg(:red).white
+        Local #{branch} has commits not on origin/#{branch}. Refusing to reset --hard.
+
+        Push or remove them before retrying.
+      ERROR
+    end
+
     def current_branch!
       stdout, _, status = Open3.capture3("git", "rev-parse", "--abbrev-ref", "HEAD")
       abort "Could not determine the current git branch." unless status.success?
@@ -309,10 +323,10 @@ module Discharger
 
         tag_steps = []
         if auto_deploy_staging
-          syscall(
-            ["git", "fetch", "origin", working_branch],
-            ["git", "reset", "--hard", "origin/#{working_branch}"]
-          )
+          ensure_clean_worktree!
+          syscall(["git", "fetch", "origin", working_branch])
+          ensure_branch_not_ahead!(working_branch)
+          syscall(["git", "reset", "--hard", "origin/#{working_branch}"])
           # tag_ref is the full SHA of the finalize commit, even if origin/working_branch
           # has since advanced. The non-auto path tags the production branch ref instead.
           tag_ref = find_release_commit!(working_branch)
@@ -336,7 +350,9 @@ module Discharger
         continue = syscall(*tag_steps) do
           tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{slack_sha}) to production.", release_message_channel, ":chipmunk:")
           if last_message_ts.present?
-            text = File.read(changelog_file)
+            # Read from the tagged commit so the posted changelog matches the released
+            # version, even if working_branch has advanced past tag_ref since finalize.
+            text = git_show_at_commit(tag_ref, changelog_file) || File.read(changelog_file)
             tasker["#{name}:slack"].reenable
             tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
           end
@@ -397,6 +413,7 @@ module Discharger
           instance_variables.sort.each do |var|
             value = instance_variable_get(var)
             value = value.call if value.is_a?(Proc) && value.arity.zero?
+            value = "[REDACTED]" if var == :@chat_token && value
             sysecho "#{var.to_s.sub("@", "").ljust(24)}: #{value}".bg(:yellow).black
           end
           sysecho "----------------------------------".bg(:green).black
@@ -411,10 +428,15 @@ module Discharger
           # Allow overriding the working branch via environment variable
           build_branch = ENV["DISCHARGER_BUILD_BRANCH"] || working_branch
 
-          delete_local_branch(staging_branch)
           syscall(
             ["git", "fetch", "origin", build_branch],
-            ["git", "checkout", build_branch],
+            ["git", "checkout", build_branch]
+          )
+          # Delete after switching off staging_branch — otherwise `git branch -D`
+          # silently fails when staging_branch is the current branch, and the next
+          # `checkout -b` then fails because the branch still exists.
+          delete_local_branch(staging_branch)
+          syscall(
             ["git", "reset", "--hard", "origin/#{build_branch}"],
             ["git", "checkout", "-b", staging_branch],
             ["git", "push", "origin", staging_branch, "--force"]
@@ -463,7 +485,10 @@ module Discharger
 
           syscall(
             ["git", "fetch", "origin", working_branch],
-            ["git", "checkout", working_branch],
+            ["git", "checkout", working_branch]
+          )
+          ensure_branch_not_ahead!(working_branch)
+          syscall(
             ["git", "reset", "--hard", "origin/#{working_branch}"],
             ["git", "checkout", "-b", finish_branch]
           )
