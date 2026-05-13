@@ -314,4 +314,145 @@ class DockerCommandTest < ActiveSupport::TestCase
       @command.execute
     end
   end
+
+  test "execute with prefer_docker true raises when native PostgreSQL is on the port" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: true)
+
+    @command.define_singleton_method(:native_postgresql_available?) { true }
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+
+    error = assert_raises(RuntimeError) { @command.execute }
+    assert_match(/prefer_docker is set/, error.message)
+    assert_match(/5432/, error.message)
+  end
+
+  test "execute with prefer_docker true creates container when no native PostgreSQL" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14", prefer_docker: true)
+
+    container_created = false
+
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+
+    @command.define_singleton_method(:system_quiet) do |cmd|
+      case cmd
+      when /docker ps.*db-test/
+        container_created
+      when /docker inspect db-test/
+        false
+      else
+        true
+      end
+    end
+
+    @command.define_singleton_method(:system!) do |*args|
+      container_created = true if args.join(" ").include?("docker run")
+    end
+
+    @command.define_singleton_method(:sleep) { |_| }
+
+    @command.execute
+
+    assert container_created, "should create the Docker container when prefer_docker is true"
+  end
+
+  test "execute with prefer_docker prompt and no native PostgreSQL skips the prompt and creates container" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14", prefer_docker: "prompt")
+
+    prompted = false
+    container_created = false
+
+    @command.define_singleton_method(:native_postgresql_available?) { false }
+    @command.define_singleton_method(:docker_running?) { true }
+    @command.define_singleton_method(:wants_native_postgresql?) do
+      prompted = true
+      false
+    end
+
+    @command.define_singleton_method(:system_quiet) do |cmd|
+      case cmd
+      when /docker ps.*db-test/
+        container_created
+      when /docker inspect db-test/
+        false
+      else
+        true
+      end
+    end
+
+    @command.define_singleton_method(:system!) do |*args|
+      container_created = true if args.join(" ").include?("docker run")
+    end
+
+    @command.define_singleton_method(:sleep) { |_| }
+
+    @command.execute
+
+    refute prompted, "should not prompt when no native PostgreSQL is detected"
+    assert container_created
+  end
+
+  test "execute with prefer_docker prompt uses native PostgreSQL when developer chooses native" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+
+    docker_checked = false
+
+    @command.define_singleton_method(:native_postgresql_available?) { true }
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+    @command.define_singleton_method(:wants_native_postgresql?) { true }
+    @command.define_singleton_method(:docker_running?) do
+      docker_checked = true
+      false
+    end
+
+    @command.execute
+
+    refute docker_checked, "should not touch Docker when developer picks native PostgreSQL"
+    assert_equal "5432", ENV["DB_PORT"]
+  end
+
+  test "execute with prefer_docker prompt raises when developer picks docker but native PostgreSQL holds the port" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+
+    @command.define_singleton_method(:native_postgresql_available?) { true }
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+    @command.define_singleton_method(:wants_native_postgresql?) { false }
+
+    error = assert_raises(RuntimeError) { @command.execute }
+    assert_match(/prefer_docker is set/, error.message)
+  end
+
+  test "wants_native_postgresql? returns true in non-interactive shells" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+    @command.define_singleton_method(:interactive_prompt_available?) { false }
+
+    assert @command.send(:wants_native_postgresql?), "non-interactive runs should default to native"
+  end
+
+  test "wants_native_postgresql? returns false when developer answers Y" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+    @command.define_singleton_method(:interactive_prompt_available?) { true }
+
+    original_stdin = $stdin
+    $stdin = StringIO.new("Y\n")
+
+    refute @command.send(:wants_native_postgresql?)
+  ensure
+    $stdin = original_stdin if original_stdin
+  end
+
+  test "wants_native_postgresql? returns true when developer answers anything other than Y" do
+    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @command.define_singleton_method(:native_postgresql_port) { 5432 }
+    @command.define_singleton_method(:interactive_prompt_available?) { true }
+
+    original_stdin = $stdin
+    $stdin = StringIO.new("\n")
+
+    assert @command.send(:wants_native_postgresql?)
+  ensure
+    $stdin = original_stdin if original_stdin
+  end
 end

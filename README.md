@@ -163,6 +163,12 @@ database:
   name: "db-your-app"
   version: "14"
   password: "postgres"
+  # Optional. Controls how the docker step handles a native PostgreSQL
+  # already listening on the configured port:
+  #   omitted/nil/false - silently skip Docker and use the native instance (legacy default)
+  #   true              - always create the Docker container; fail if a native instance holds the port
+  #   "prompt"          - ask the developer (interactive shells only; non-interactive runs fall back to native)
+  prefer_docker: "prompt"
 
 redis:
   port: 6379
