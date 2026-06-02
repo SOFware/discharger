@@ -199,12 +199,12 @@ The `pre_steps` array defines commands that run **before Rails loads**. These ar
 
 Built-in pre_steps:
 - `homebrew` - Installs Homebrew if not present (macOS)
-- `postgresql_tools` - Installs PostgreSQL client tools (`pg_dump`, `psql`)
+- `postgresql_tools` - Optionally installs PostgreSQL client tools (`pg_dump`, `psql`) for apps that use `structure.sql` or call those tools directly
 
 ```yaml
 pre_steps:
   - homebrew
-  - postgresql_tools
+  # - postgresql_tools
 ```
 
 You can also define custom pre_steps with shell commands:
@@ -228,6 +228,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `yarn` - Install JavaScript packages
 - `config` - Copy configuration files
 - `docker` - Setup Docker containers
+- `pg_tools` - Create Docker-aware `pg_dump` and `psql` wrappers for apps that use `structure.sql` or call those tools directly
 - `env` - Configure environment variables
 - `database` - Setup and migrate database
 

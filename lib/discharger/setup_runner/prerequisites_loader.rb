@@ -55,12 +55,34 @@ module Discharger
       def set_db_port(db_config)
         if db_config["port"] && !ENV["DB_PORT"]
           ENV["DB_PORT"] = db_config["port"].to_s
-          ENV["PGPORT"] = db_config["port"].to_s
+          set_pgport_if_needed(db_config["port"].to_s)
           puts "  Setting DB_PORT=#{db_config["port"]} from config/setup.yml"
         elsif ENV["DB_PORT"]
           warn_if_mismatch("DB_PORT", ENV["DB_PORT"], db_config["port"].to_s)
-          ENV["PGPORT"] = ENV["DB_PORT"]
+          set_pgport_if_needed(ENV["DB_PORT"])
         end
+      end
+
+      def set_pgport_if_needed(port)
+        ENV["PGPORT"] = port if postgresql_cli_setup_enabled?
+      end
+
+      def postgresql_cli_setup_enabled?
+        configured_pre_steps.include?("postgresql_tools") ||
+          configured_steps.include?("pg_tools") ||
+          all_regular_steps_enabled?
+      end
+
+      def configured_pre_steps
+        Array(config["pre_steps"]).select { |step| step.is_a?(String) }
+      end
+
+      def configured_steps
+        Array(config["steps"]).select { |step| step.is_a?(String) }
+      end
+
+      def all_regular_steps_enabled?
+        !config.key?("steps") || Array(config["steps"]).empty?
       end
 
       def set_db_name(db_config)

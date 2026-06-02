@@ -24,7 +24,7 @@ redis:
 #
 # Built-in pre_steps:
 #   - homebrew         # Installs Homebrew if not present
-#   - postgresql_tools # Installs PostgreSQL client tools (pg_dump, psql)
+#   - postgresql_tools # Optional: installs PostgreSQL client tools for structure.sql workflows
 #
 # Custom pre_steps (run shell commands):
 #   - description: "Description of step"
@@ -33,7 +33,7 @@ redis:
 #
 pre_steps: []
   # - homebrew
-  # - postgresql_tools
+  # - postgresql_tools # Optional: for apps that use structure.sql or pg_dump/psql directly
 
 # Built-in commands to run (empty array runs all available commands)
 # Available commands: brew, asdf, git, bundler, yarn, config, docker, pg_tools, env, database
@@ -45,9 +45,11 @@ steps:
   - yarn
   - config
   - docker
-  - pg_tools
   - env
   - database
+
+# Optional for apps that use structure.sql or other pg_dump/psql workflows:
+#   - pg_tools
 
 # Custom commands for application-specific setup (run AFTER Rails loads)
 custom_steps:
