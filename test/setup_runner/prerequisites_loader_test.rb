@@ -24,6 +24,79 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     yaml_content = <<~YAML
       database:
         port: 5433
+      steps:
+        - pg_tools
+    YAML
+    create_file("setup.yml", yaml_content)
+
+    original_db_port = ENV["DB_PORT"]
+    original_pgport = ENV["PGPORT"]
+    ENV.delete("DB_PORT")
+    ENV.delete("PGPORT")
+
+    begin
+      loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
+      capture_io { loader.run }
+
+      assert_equal "5433", ENV["DB_PORT"]
+      assert_equal "5433", ENV["PGPORT"]
+    ensure
+      if original_db_port
+        ENV["DB_PORT"] = original_db_port
+      else
+        ENV.delete("DB_PORT")
+      end
+      if original_pgport
+        ENV["PGPORT"] = original_pgport
+      else
+        ENV.delete("PGPORT")
+      end
+    end
+  end
+
+  test "does not set PGPORT when PostgreSQL CLI setup is not enabled" do
+    yaml_content = <<~YAML
+      database:
+        port: 5433
+      steps:
+        - docker
+        - database
+    YAML
+    create_file("setup.yml", yaml_content)
+
+    original_db_port = ENV["DB_PORT"]
+    original_pgport = ENV["PGPORT"]
+    ENV.delete("DB_PORT")
+    ENV.delete("PGPORT")
+
+    begin
+      loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
+      capture_io { loader.run }
+
+      assert_equal "5433", ENV["DB_PORT"]
+      assert_nil ENV["PGPORT"]
+    ensure
+      if original_db_port
+        ENV["DB_PORT"] = original_db_port
+      else
+        ENV.delete("DB_PORT")
+      end
+      if original_pgport
+        ENV["PGPORT"] = original_pgport
+      else
+        ENV.delete("PGPORT")
+      end
+    end
+  end
+
+  test "sets PGPORT when pg_tools step is enabled" do
+    yaml_content = <<~YAML
+      database:
+        port: 5433
+      steps:
+        - docker
+        - pg_tools
+        - database
     YAML
     create_file("setup.yml", yaml_content)
 

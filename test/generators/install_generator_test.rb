@@ -44,6 +44,8 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_file "config/setup.yml" do |content|
       assert_match(/app_name:/, content)
       assert_match(/steps:/, content)
+      refute_match(/^\s+- pg_tools$/, content)
+      assert_match(/structure\.sql/, content)
     end
   end
 
