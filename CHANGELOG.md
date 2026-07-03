@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Treat generated pg_tools setup as opt-in for apps that use structure.sql or PostgreSQL CLI workflows.
 
+### Fixed
+
+- Retry `brew bundle` once before failing setup, so transient Homebrew lock contention (e.g. two `bin/setup` runs on the same host) doesn't hard-fail the whole run.
+
 ## [0.3.1] - 2026-05-13
 
 ### Added

@@ -95,6 +95,7 @@ class BrewCommandTest < ActiveSupport::TestCase
     # Mock user input and failing system call
     input = StringIO.new("Y\n")
     @command.define_singleton_method(:gets) { input.gets }
+    @command.define_singleton_method(:retry_delay) { 0 }
     @command.define_singleton_method(:system!) do |*args|
       raise "brew bundle failed:"
     end
@@ -104,5 +105,49 @@ class BrewCommandTest < ActiveSupport::TestCase
         @command.execute
       end
     end
+  end
+
+  test "execute retries once after a transient brew bundle failure and succeeds" do
+    create_file("Brewfile", "brew 'git'")
+
+    input = StringIO.new("Y\n")
+    @command.define_singleton_method(:gets) { input.gets }
+    @command.define_singleton_method(:retry_delay) { 0 }
+
+    call_count = 0
+    @command.define_singleton_method(:system!) do |*args|
+      call_count += 1
+      raise "brew bundle failed: lock contention" if call_count == 1
+    end
+
+    with_tty_stdin do
+      with_output_enabled do
+        capture_output { @command.execute }
+      end
+    end
+
+    assert_equal 2, call_count
+  end
+
+  test "execute does not retry a second time after two consecutive failures" do
+    create_file("Brewfile", "brew 'git'")
+
+    input = StringIO.new("Y\n")
+    @command.define_singleton_method(:gets) { input.gets }
+    @command.define_singleton_method(:retry_delay) { 0 }
+
+    call_count = 0
+    @command.define_singleton_method(:system!) do |*args|
+      call_count += 1
+      raise "brew bundle failed: still broken"
+    end
+
+    assert_raises(RuntimeError) do
+      capture_output do
+        @command.execute
+      end
+    end
+
+    assert_equal 2, call_count
   end
 end
