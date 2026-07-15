@@ -85,6 +85,10 @@ module Discharger
                     shift
                     ;;
                   -h|--host)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
                     HOST="$2"
                     shift 2
                     ;;
@@ -97,6 +101,10 @@ module Discharger
                     shift
                     ;;
                   -p|--port)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
                     PORT="$2"
                     shift 2
                     ;;
@@ -195,6 +203,10 @@ module Discharger
                     shift
                     ;;
                   -h|--host)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
                     HOST="$2"
                     shift 2
                     ;;
@@ -207,6 +219,10 @@ module Discharger
                     shift
                     ;;
                   -p|--port)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
                     PORT="$2"
                     shift 2
                     ;;

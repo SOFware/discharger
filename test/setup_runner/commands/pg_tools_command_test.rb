@@ -162,9 +162,53 @@ class PgToolsCommandTest < ActiveSupport::TestCase
     assert_equal ["-U", "postgres", "-d", "testapp_development", "-h", "db.example.com", "-p", "6543"], args
   end
 
+  test "psql wrapper drops attached localhost host and port flags" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "-hlocalhost", "-p5434", "-d", "postgres")
+    assert_equal ["-U", "postgres", "-d", "postgres"], args
+  end
+
+  test "psql wrapper drops equals-form localhost host and port flags" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "--host=localhost", "--port=5434", "-d", "postgres")
+    assert_equal ["-U", "postgres", "-d", "postgres"], args
+  end
+
+  test "psql wrapper passes equals-form remote host and port through to docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "--host=db.example.com", "--port=6543", "-d", "postgres")
+    assert_equal ["-U", "postgres", "-d", "postgres", "-h", "db.example.com", "-p", "6543"], args
+  end
+
+  test "pg_dump wrapper drops attached localhost host and port flags" do
+    capture_output { @command.execute }
+    args = docker_exec_args("pg_dump", "-h127.0.0.1", "-p5434", "-d", "testapp_development")
+    assert_equal ["-U", "postgres", "-d", "testapp_development"], args
+  end
+
+  test "pg_dump wrapper passes attached remote host and port through to docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("pg_dump", "-hdb.example.com", "-p6543", "-d", "testapp_development")
+    assert_equal ["-U", "postgres", "-d", "testapp_development", "-h", "db.example.com", "-p", "6543"], args
+  end
+
+  test "psql wrapper fails with a clear error when a host flag is missing its value" do
+    capture_output { @command.execute }
+    _out, err, status = run_wrapper("psql", "-d", "postgres", "-h")
+    refute status.success?
+    assert_includes err, "-h requires an argument"
+  end
+
+  test "psql wrapper fails with a clear error when a port flag is missing its value" do
+    capture_output { @command.execute }
+    _out, err, status = run_wrapper("psql", "-d", "postgres", "--port")
+    refute status.success?
+    assert_includes err, "--port requires an argument"
+  end
+
   private
 
-  def docker_exec_args(tool, *args)
+  def run_wrapper(tool, *args)
     stub_dir = File.join(@test_dir, "docker-stub")
     FileUtils.mkdir_p(stub_dir)
     stub_path = File.join(stub_dir, "docker")
@@ -180,10 +224,14 @@ class PgToolsCommandTest < ActiveSupport::TestCase
     FileUtils.chmod(0o755, stub_path)
 
     wrapper = File.join(@test_dir, "bin", "pg-tools", tool)
-    out, err, status = Open3.capture3(
+    Open3.capture3(
       {"PATH" => "#{stub_dir}:#{ENV["PATH"]}"},
       wrapper, *args
     )
+  end
+
+  def docker_exec_args(tool, *args)
+    out, err, status = run_wrapper(tool, *args)
     assert status.success?, "wrapper failed: #{err}"
     out.split("\n")
   end
