@@ -62,6 +62,8 @@ module Discharger
               # When running in Docker, we need to output to stdout and redirect locally
               OUTPUT_FILE=""
               HAS_USER=""
+              HOST=""
+              PORT=""
               ARGS=()
               while [[ $# -gt 0 ]]; do
                 case $1 in
@@ -82,6 +84,38 @@ module Discharger
                     ARGS+=("$1")
                     shift
                     ;;
+                  -h|--host)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
+                    HOST="$2"
+                    shift 2
+                    ;;
+                  -h?*)
+                    HOST="${1#-h}"
+                    shift
+                    ;;
+                  --host=*)
+                    HOST="${1#*=}"
+                    shift
+                    ;;
+                  -p|--port)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
+                    PORT="$2"
+                    shift 2
+                    ;;
+                  -p?*)
+                    PORT="${1#-p}"
+                    shift
+                    ;;
+                  --port=*)
+                    PORT="${1#*=}"
+                    shift
+                    ;;
                   *)
                     ARGS+=("$1")
                     shift
@@ -93,6 +127,19 @@ module Discharger
               if [[ -z "$HAS_USER" ]]; then
                 ARGS=("-U" "postgres" "${ARGS[@]}")
               fi
+
+              # Drop localhost host/port flags: they target the host-mapped
+              # port, but inside the container Postgres listens on its default
+              # port. Remote hosts pass through untouched.
+              case "$HOST" in
+                ""|localhost|127.0.0.1|::1) ;;
+                *)
+                  ARGS+=("-h" "$HOST")
+                  if [[ -n "$PORT" ]]; then
+                    ARGS+=("-p" "$PORT")
+                  fi
+                  ;;
+              esac
 
               if [[ -n "$OUTPUT_FILE" ]]; then
                 # Run pg_dump in container, output to stdout, redirect to local file
@@ -133,6 +180,8 @@ module Discharger
               # so we pipe file content via stdin instead
               INPUT_FILE=""
               HAS_USER=""
+              HOST=""
+              PORT=""
               ARGS=()
               while [[ $# -gt 0 ]]; do
                 case $1 in
@@ -153,6 +202,38 @@ module Discharger
                     ARGS+=("$1")
                     shift
                     ;;
+                  -h|--host)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
+                    HOST="$2"
+                    shift 2
+                    ;;
+                  -h?*)
+                    HOST="${1#-h}"
+                    shift
+                    ;;
+                  --host=*)
+                    HOST="${1#*=}"
+                    shift
+                    ;;
+                  -p|--port)
+                    if [[ $# -lt 2 ]]; then
+                      echo "Error: $1 requires an argument" >&2
+                      exit 2
+                    fi
+                    PORT="$2"
+                    shift 2
+                    ;;
+                  -p?*)
+                    PORT="${1#-p}"
+                    shift
+                    ;;
+                  --port=*)
+                    PORT="${1#*=}"
+                    shift
+                    ;;
                   *)
                     ARGS+=("$1")
                     shift
@@ -164,6 +245,19 @@ module Discharger
               if [[ -z "$HAS_USER" ]]; then
                 ARGS=("-U" "postgres" "${ARGS[@]}")
               fi
+
+              # Drop localhost host/port flags: they target the host-mapped
+              # port, but inside the container Postgres listens on its default
+              # port. Remote hosts pass through untouched.
+              case "$HOST" in
+                ""|localhost|127.0.0.1|::1) ;;
+                *)
+                  ARGS+=("-h" "$HOST")
+                  if [[ -n "$PORT" ]]; then
+                    ARGS+=("-p" "$PORT")
+                  fi
+                  ;;
+              esac
 
               if [[ -n "$INPUT_FILE" ]]; then
                 docker exec -i "$CONTAINER" #{tool} "${ARGS[@]}" < "$INPUT_FILE"
