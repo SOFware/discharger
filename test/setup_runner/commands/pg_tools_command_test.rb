@@ -2,6 +2,7 @@ require "test_helper"
 require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/pg_tools_command"
 require "logger"
+require "open3"
 require "ostruct"
 
 class PgToolsCommandTest < ActiveSupport::TestCase
@@ -129,5 +130,61 @@ class PgToolsCommandTest < ActiveSupport::TestCase
     content = File.read(File.join(@test_dir, "bin", "pg-tools", "psql"))
     # Should NOT contain a bare "exec psql" without the FALLBACK variable
     refute_match(/^exec psql/, content)
+  end
+
+  test "psql wrapper drops localhost host and port before docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "-h", "localhost", "-p", "5434", "-d", "postgres", "-c", "SELECT 1")
+    assert_equal ["-U", "postgres", "-d", "postgres", "-c", "SELECT 1"], args
+  end
+
+  test "psql wrapper drops a bare port flag before docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "-p", "5434", "-d", "postgres")
+    assert_equal ["-U", "postgres", "-d", "postgres"], args
+  end
+
+  test "psql wrapper passes a remote host and port through to docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("psql", "-h", "db.example.com", "-p", "6543", "-d", "postgres")
+    assert_equal ["-U", "postgres", "-d", "postgres", "-h", "db.example.com", "-p", "6543"], args
+  end
+
+  test "pg_dump wrapper drops localhost host and port before docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("pg_dump", "-h", "127.0.0.1", "-p", "5434", "-d", "testapp_development")
+    assert_equal ["-U", "postgres", "-d", "testapp_development"], args
+  end
+
+  test "pg_dump wrapper passes a remote host and port through to docker exec" do
+    capture_output { @command.execute }
+    args = docker_exec_args("pg_dump", "-h", "db.example.com", "-p", "6543", "-d", "testapp_development")
+    assert_equal ["-U", "postgres", "-d", "testapp_development", "-h", "db.example.com", "-p", "6543"], args
+  end
+
+  private
+
+  def docker_exec_args(tool, *args)
+    stub_dir = File.join(@test_dir, "docker-stub")
+    FileUtils.mkdir_p(stub_dir)
+    stub_path = File.join(stub_dir, "docker")
+    File.write(stub_path, <<~BASH)
+      #!/usr/bin/env bash
+      if [[ "$1" == "ps" ]]; then
+        echo "db-testapp"
+        exit 0
+      fi
+      shift 4
+      printf '%s\\n' "$@"
+    BASH
+    FileUtils.chmod(0o755, stub_path)
+
+    wrapper = File.join(@test_dir, "bin", "pg-tools", tool)
+    out, err, status = Open3.capture3(
+      {"PATH" => "#{stub_dir}:#{ENV["PATH"]}"},
+      wrapper, *args
+    )
+    assert status.success?, "wrapper failed: #{err}"
+    out.split("\n")
   end
 end
