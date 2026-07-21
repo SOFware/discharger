@@ -24,6 +24,7 @@ module Discharger
         reissue.fragment = task.fragment
         reissue.clear_fragments = task.clear_fragments
         reissue.tag_pattern = task.tag_pattern
+        reissue.runbook_file = task.runbook_file
       end
       task.define
       task
@@ -179,6 +180,27 @@ module Discharger
       stdout.strip
     end
 
+    # The post-release steps collected from "Runbook:" commit trailers.
+    # Empty when no runbook is configured or the file has yet to be written.
+    def runbook_items
+      return [] unless runbook_file
+
+      Reissue::Runbook.new(Rails.root.join(runbook_file).to_s).items
+    end
+
+    # Build the Slack message listing the post-release steps for a version.
+    # Returns nil when the project does not use a runbook, which is distinct
+    # from a configured runbook that happens to have no steps this release.
+    def runbook_announcement(version, items = runbook_items)
+      return nil unless runbook_file
+
+      header = "*Post-release runbook for #{version}*"
+      return "#{header}\nNo runbook tasks for this release." if items.empty?
+
+      "#{header} — #{items.size} step#{"s" unless items.size == 1}\n\n" +
+        items.map { |item| "• #{item}" }.join("\n")
+    end
+
     def existing_pr_number(base, head)
       stdout, _, status = Open3.capture3(
         "gh", "pr", "list",
@@ -286,10 +308,17 @@ module Discharger
           ["git push origin v#{current_version}"]
         ) do
           tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
-          if last_message_ts.present?
+          # Capture the root before replying; each post overwrites last_message_ts.
+          thread_ts = last_message_ts
+          if thread_ts.present?
             text = File.read(Rails.root.join(changelog_file))
             tasker["#{name}:slack"].reenable
-            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", last_message_ts)
+            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", thread_ts)
+
+            if (runbook_message = runbook_announcement(current_version))
+              tasker["#{name}:slack"].reenable
+              tasker["#{name}:slack"].invoke(runbook_message, release_message_channel, ":clipboard:", thread_ts)
+            end
           end
           # Signal success — no branch switch needed since we stay on working_branch throughout
           true
