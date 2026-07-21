@@ -573,3 +573,90 @@ class DischargerReleaseThreadTest < Minitest::Test
       "Projects without a runbook should only get the announcement and changelog"
   end
 end
+
+class DischargerStageAnnouncementTest < Minitest::Test
+  FAKE_VERSION = "1.2.3"
+
+  def setup
+    @slack_calls = []
+    Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
+  end
+
+  # Builds a task whose :slack subtask records its arguments and assigns a new
+  # message timestamp on each post, the way the real Slack task does.
+  def build_task(name, runbook_items: nil)
+    holder = []
+    slack_calls = @slack_calls
+    timestamps = ["ROOT.1", "REPLY.1"]
+
+    noop = Object.new
+    noop.define_singleton_method(:invoke) { |*_args| }
+    noop.define_singleton_method(:reenable) {}
+
+    slack = Object.new
+    slack.define_singleton_method(:reenable) {}
+    slack.define_singleton_method(:invoke) do |*args|
+      slack_calls << args
+      holder.first.instance_variable_set(:@last_message_ts, timestamps.shift)
+    end
+
+    tasker = Object.new
+    tasker.define_singleton_method(:[]) do |task_name|
+      task_name.to_s.end_with?(":slack") ? slack : noop
+    end
+
+    task = Discharger::Task.new(name, tasker:)
+    holder << task
+
+    task.version_constant = "DischargerStageAnnouncementTest::FAKE_VERSION"
+    task.version_file = "VERSION"
+    task.release_message_channel = "#releases"
+    task.chat_token = "fake_token"
+    task.app_name = "TestApp"
+    task.commit_identifier = -> { "abc123" }
+    task.runbook_file = runbook_items && "RUNBOOK.md"
+
+    task.define_singleton_method(:syscall) do |*_steps, **_kwargs, &block|
+      block&.call("", "", nil)
+      true
+    end
+    task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:runbook_items) { runbook_items || [] }
+
+    task
+  end
+
+  def run_build(name, runbook_items: nil)
+    task = build_task(name, runbook_items:)
+    task.define
+    capture_io { Rake::Task["#{name}:build"].invoke }
+    task
+  end
+
+  def test_build_posts_runbook_as_a_reply_in_the_stage_thread
+    run_build(:stage_runbook, runbook_items: ["Run `rake data:cleanup`"])
+
+    assert_equal 2, @slack_calls.size, "Expected the build announcement and the runbook"
+
+    runbook_text, channel, emoji, ts = @slack_calls.last
+    assert_match(/Post-release runbook for 1\.2\.3/, runbook_text)
+    assert_match(/• Run `rake data:cleanup`/, runbook_text)
+    assert_equal "#releases", channel
+    assert_equal ":clipboard:", emoji
+    assert_equal "ROOT.1", ts, "Runbook must thread off the build announcement"
+  end
+
+  def test_build_reports_no_tasks_when_runbook_is_configured_but_empty
+    run_build(:stage_runbook_empty, runbook_items: [])
+
+    assert_equal 2, @slack_calls.size
+    assert_match(/No runbook tasks for this release\./, @slack_calls.last.first)
+  end
+
+  def test_build_posts_nothing_extra_when_runbook_is_not_configured
+    run_build(:stage_no_runbook, runbook_items: nil)
+
+    assert_equal 1, @slack_calls.size,
+      "Projects without a runbook should only get the build announcement"
+  end
+end

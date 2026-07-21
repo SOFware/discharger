@@ -112,8 +112,10 @@ Runbook: Run \`rake data:cleanup\` after deploy"
 ```
 
 `rake release:prepare` finalizes the runbook alongside the changelog, so the release tag
-records exactly which steps that version needs. After the production release, Discharger
-posts the checklist to Slack as a reply in the release thread, right after the changelog:
+records exactly which steps that version needs. Discharger posts the checklist to Slack as
+a reply in the deploy thread — both on the stage build (`rake release:build` /
+`rake release:stage`, threaded under "Building…") and after the production release
+(threaded under the release announcement, right after the changelog):
 
 ```
 *Post-release runbook for 1.2.3* — 2 steps
@@ -121,6 +123,9 @@ posts the checklist to Slack as a reply in the release thread, right after the c
 • Run `rake data:cleanup` (abc1234)
 • Re-index search documents (def5678)
 ```
+
+Staging shows the steps as a preview so the team sees what production will need before it
+happens; the production thread repeats them when the release actually lands.
 
 When a release needs no follow-up, the thread says so explicitly rather than staying
 silent, so nobody has to wonder whether the check was skipped:
