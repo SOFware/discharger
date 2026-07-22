@@ -201,6 +201,19 @@ module Discharger
         items.map { |item| "• #{item}" }.join("\n")
     end
 
+    # Post the runbook as a reply in a Slack thread, when a runbook is
+    # configured. Reuses the same message on the stage build and the
+    # production release. Returns the message posted, or nil when there is
+    # no thread to reply to or no runbook to announce.
+    def post_runbook_to_thread(version, thread_ts)
+      return unless thread_ts.present?
+      return unless (message = runbook_announcement(version))
+
+      tasker["#{name}:slack"].reenable
+      tasker["#{name}:slack"].invoke(message, release_message_channel, ":clipboard:", thread_ts)
+      message
+    end
+
     def existing_pr_number(base, head)
       stdout, _, status = Open3.capture3(
         "gh", "pr", "list",
@@ -315,10 +328,7 @@ module Discharger
             tasker["#{name}:slack"].reenable
             tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", thread_ts)
 
-            if (runbook_message = runbook_announcement(current_version))
-              tasker["#{name}:slack"].reenable
-              tasker["#{name}:slack"].invoke(runbook_message, release_message_channel, ":clipboard:", thread_ts)
-            end
+            post_runbook_to_thread(current_version, thread_ts)
           end
           # Signal success — no branch switch needed since we stay on working_branch throughout
           true
@@ -385,6 +395,7 @@ module Discharger
           ) do
             current_version = Object.const_get(version_constant)
             tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
+            post_runbook_to_thread(current_version, last_message_ts)
             syscall ["git checkout #{build_branch}"]
           end
         end
