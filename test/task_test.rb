@@ -367,3 +367,209 @@ class DischargerExistingPrNumberTest < Minitest::Test
     assert_nil @task.existing_pr_number("main", "develop")
   end
 end
+
+class DischargerRunbookAnnouncementTest < Minitest::Test
+  def setup
+    @task = Discharger::Task.new
+  end
+
+  def test_returns_nil_when_runbook_is_not_configured
+    assert_nil @task.runbook_announcement("1.2.3", ["Run `rake data:cleanup`"])
+  end
+
+  def test_reports_no_tasks_when_runbook_is_empty
+    @task.runbook_file = "RUNBOOK.md"
+
+    assert_equal <<~MSG.chomp, @task.runbook_announcement("1.2.3", [])
+      *Post-release runbook for 1.2.3*
+      No runbook tasks for this release.
+    MSG
+  end
+
+  def test_uses_singular_step_for_a_single_item
+    @task.runbook_file = "RUNBOOK.md"
+
+    assert_equal <<~MSG.chomp, @task.runbook_announcement("1.2.3", ["Run `rake data:cleanup`"])
+      *Post-release runbook for 1.2.3* — 1 step
+
+      • Run `rake data:cleanup`
+    MSG
+  end
+
+  def test_lists_every_item_as_a_bullet
+    @task.runbook_file = "RUNBOOK.md"
+    items = ["Run `rake data:cleanup` (abc1234)", "Re-index search documents (def5678)"]
+
+    assert_equal <<~MSG.chomp, @task.runbook_announcement("1.2.3", items)
+      *Post-release runbook for 1.2.3* — 2 steps
+
+      • Run `rake data:cleanup` (abc1234)
+      • Re-index search documents (def5678)
+    MSG
+  end
+
+  def test_runbook_items_are_empty_when_runbook_is_not_configured
+    assert_empty @task.runbook_items
+  end
+
+  def test_runbook_items_reads_checklist_text_from_the_runbook_file
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "RUNBOOK.md")
+      File.write(path, <<~MARKDOWN)
+        # Runbook
+
+        Steps to perform after releasing the version below.
+
+        ## [1.2.3] - 2026-07-21
+
+        - [ ] Run `rake data:cleanup` (abc1234)
+        - [x] Re-index search documents (def5678)
+      MARKDOWN
+
+      @task.runbook_file = path
+
+      assert_equal [
+        "Run `rake data:cleanup` (abc1234)",
+        "Re-index search documents (def5678)"
+      ], @task.runbook_items
+    end
+  end
+end
+
+class DischargerRunbookForwardingTest < Minitest::Test
+  def test_create_forwards_runbook_file_to_reissue
+    captured_runbook_file = nil
+
+    original_create = Reissue::Task.method(:create)
+    Reissue::Task.define_singleton_method(:create) do |name = :reissue, &block|
+      reissue_task = Reissue::Task.new(name)
+      block&.call(reissue_task)
+      captured_runbook_file = reissue_task.runbook_file
+      reissue_task
+    end
+
+    Discharger::Task.create(:test_runbook_file) do
+      self.version_file = "VERSION"
+      self.runbook_file = "RUNBOOK.md"
+    end
+
+    assert_equal "RUNBOOK.md", captured_runbook_file
+  ensure
+    Reissue::Task.define_singleton_method(:create, original_create)
+  end
+end
+
+class DischargerReleaseThreadTest < Minitest::Test
+  FAKE_VERSION = "1.2.3"
+
+  def setup
+    @slack_calls = []
+    @original_stdin = $stdin
+    Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
+
+    # The release task reads the changelog straight off disk to post it to Slack.
+    @changelog_path = Rails.root.join("CHANGELOG.md")
+    File.write(@changelog_path, "## [1.2.3]\n\n### Fixed\n\n- A bug\n")
+  end
+
+  def teardown
+    $stdin = @original_stdin
+    FileUtils.rm_f(@changelog_path)
+  end
+
+  # Builds a task whose :slack subtask records its arguments and assigns a new
+  # message timestamp on each post, the way the real Slack task does.
+  def build_task(name, runbook_items: nil)
+    holder = []
+    slack_calls = @slack_calls
+    timestamps = ["ROOT.1", "REPLY.1", "REPLY.2"]
+
+    noop = Object.new
+    noop.define_singleton_method(:invoke) { |*_args| }
+    noop.define_singleton_method(:reenable) {}
+
+    slack = Object.new
+    slack.define_singleton_method(:reenable) {}
+    slack.define_singleton_method(:invoke) do |*args|
+      slack_calls << args
+      holder.first.instance_variable_set(:@last_message_ts, timestamps.shift)
+    end
+
+    tasker = Object.new
+    tasker.define_singleton_method(:[]) do |task_name|
+      task_name.to_s.end_with?(":slack") ? slack : noop
+    end
+
+    task = Discharger::Task.new(name, tasker:)
+    holder << task
+
+    task.version_constant = "DischargerReleaseThreadTest::FAKE_VERSION"
+    task.version_file = "VERSION"
+    task.changelog_file = "CHANGELOG.md"
+    task.release_message_channel = "#releases"
+    task.chat_token = "fake_token"
+    task.pull_request_url = "http://example.com"
+    task.app_name = "TestApp"
+    task.commit_identifier = -> { "abc123" }
+    task.runbook_file = runbook_items && "RUNBOOK.md"
+
+    task.define_singleton_method(:syscall) do |*_steps, **_kwargs, &block|
+      block&.call("", "", nil)
+      true
+    end
+    task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:validate_release_commit!) { |*_args, **_kwargs| true }
+    task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+    task.define_singleton_method(:pr_already_merged?) { |_ref| false }
+    task.define_singleton_method(:runbook_items) { runbook_items || [] }
+
+    task
+  end
+
+  def run_release(name, runbook_items: nil)
+    task = build_task(name, runbook_items:)
+    task.define
+    $stdin = StringIO.new("\n")
+    capture_io { Rake::Task[name.to_s].invoke }
+    task
+  end
+
+  def test_posts_runbook_as_a_reply_in_the_release_thread
+    run_release(:rel_runbook, runbook_items: ["Run `rake data:cleanup`"])
+
+    assert_equal 3, @slack_calls.size, "Expected announcement, changelog, and runbook"
+
+    runbook_text, channel, emoji, ts = @slack_calls.last
+    assert_match(/Post-release runbook for 1\.2\.3/, runbook_text)
+    assert_match(/• Run `rake data:cleanup`/, runbook_text)
+    assert_equal "#releases", channel
+    assert_equal ":clipboard:", emoji
+    assert_equal "ROOT.1", ts, "Runbook must thread off the release announcement"
+  end
+
+  def test_threads_changelog_and_runbook_off_the_release_announcement
+    run_release(:rel_thread_root, runbook_items: ["Rotate the signing key"])
+
+    changelog_ts = @slack_calls[1][3]
+    runbook_ts = @slack_calls[2][3]
+
+    assert_equal "ROOT.1", changelog_ts
+    assert_equal "ROOT.1", runbook_ts,
+      "Runbook must thread off the root, not off the changelog reply"
+  end
+
+  def test_reports_no_tasks_when_runbook_is_configured_but_empty
+    run_release(:rel_runbook_empty, runbook_items: [])
+
+    assert_equal 3, @slack_calls.size
+    assert_match(/No runbook tasks for this release\./, @slack_calls.last.first)
+  end
+
+  def test_posts_nothing_extra_when_runbook_is_not_configured
+    run_release(:rel_no_runbook, runbook_items: nil)
+
+    assert_equal 2, @slack_calls.size,
+      "Projects without a runbook should only get the announcement and changelog"
+  end
+end

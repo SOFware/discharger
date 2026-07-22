@@ -34,6 +34,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency "prism", ">= 0.19.0"
   spec.add_dependency "rails", ">= 7.2.1"
   spec.add_dependency "rainbow"
-  spec.add_dependency "reissue"
+  spec.add_dependency "reissue", ">= 0.5"
   spec.add_dependency "slack-ruby-client"
 end

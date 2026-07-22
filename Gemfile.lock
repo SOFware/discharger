@@ -6,7 +6,7 @@ PATH
       prism (>= 0.19.0)
       rails (>= 7.2.1)
       rainbow
-      reissue
+      reissue (>= 0.5)
       slack-ruby-client
 
 GEM
@@ -215,13 +215,13 @@ GEM
       tsort (>= 0.2)
       zeitwerk (~> 2.6)
     rainbow (3.1.1)
-    rake (13.3.1)
+    rake (13.4.2)
     rdoc (7.2.0)
       erb
       psych (>= 4.0.0)
       tsort
     regexp_parser (2.12.0)
-    reissue (0.4.22)
+    reissue (0.5.0)
       rake
     reline (0.6.3)
       io-console (~> 0.5)
@@ -297,4 +297,4 @@ DEPENDENCIES
   standard
 
 BUNDLED WITH
-   2.6.8
+   2.6.7

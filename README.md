@@ -89,6 +89,51 @@ changelog.d/
 
 Each fragment file should contain the changelog entry for a specific change or feature.
 
+### Post-release Runbook
+
+Some releases need manual follow-up: run a rake task, backfill data, re-index documents.
+Reissue collects those steps from `Runbook:` commit trailers, and Discharger announces
+them to your team in the release thread.
+
+```ruby
+Discharger::Task.create do |task|
+  # ... other configuration ...
+  task.runbook_file = "RUNBOOK.md"  # Default: nil (disabled)
+end
+```
+
+Add steps as you work, in the same commit as the change that requires them:
+
+```bash
+git commit -m "Add data migration
+
+Fixed: Duplicate user records
+Runbook: Run \`rake data:cleanup\` after deploy"
+```
+
+`rake release:prepare` finalizes the runbook alongside the changelog, so the release tag
+records exactly which steps that version needs. After the production release, Discharger
+posts the checklist to Slack as a reply in the release thread, right after the changelog:
+
+```
+*Post-release runbook for 1.2.3* — 2 steps
+
+• Run `rake data:cleanup` (abc1234)
+• Re-index search documents (def5678)
+```
+
+When a release needs no follow-up, the thread says so explicitly rather than staying
+silent, so nobody has to wonder whether the check was skipped:
+
+```
+*Post-release runbook for 1.2.3*
+No runbook tasks for this release.
+```
+
+Leave `runbook_file` unset and Discharger posts nothing extra. See the
+[Reissue runbook documentation](https://github.com/SOFware/reissue#post-release-runbook)
+for how items are collected and merged.
+
 ## Available Tasks
 
 The gem creates several Rake tasks for managing your deployment workflow:
