@@ -2,6 +2,12 @@ name: Release gem to RubyGems.org
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Test workflow without publishing to RubyGems'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   release:
@@ -9,3 +15,5 @@ jobs:
     with:
       git_user_email: 'gems@sofwarellc.com'
       git_user_name: 'SOFware'
+      dry_run: ${{ inputs.dry_run }}
+      generate_checksum: true
