@@ -47,6 +47,7 @@ module Discharger
     attr_accessor :app_name
     attr_accessor :commit_identifier
     attr_accessor :pull_request_url
+    attr_accessor :pr_label
     attr_accessor :fragment_directory
     attr_accessor :fragment
     attr_accessor :clear_fragments
@@ -192,6 +193,31 @@ module Discharger
       abort "Working tree has uncommitted changes. Commit or stash them before running rake #{name}:prepare."
     end
 
+    def validate_pr_label!
+      return true unless pr_label
+
+      _, stderr, status = Open3.capture3("gh", "label", "view", pr_label)
+      return true if status.success?
+
+      abort <<~ERROR.bg(:red).white
+        Could not find GitHub label '#{pr_label}'.
+
+        #{stderr}
+      ERROR
+    end
+
+    # gh pr create fails when a PR already exists for the branch, so re-runs
+    # reuse it instead.
+    def create_labeled_pr!(head:, title:, body:)
+      if (pr_number = existing_pr_number(working_branch, head))
+        return sysecho("Reusing existing PR ##{pr_number} for #{head}.")
+      end
+
+      syscall(
+        ["gh pr create --base #{working_branch} --head #{head} --title '#{title}' --body '#{body}' --label '#{pr_label}'"]
+      )
+    end
+
     # Guards the reset --hard below from discarding unpushed local commits.
     def ensure_branch_not_ahead!(branch)
       stdout, _, status = Open3.capture3("git", "rev-list", "--count", "origin/#{branch}..#{branch}")
@@ -282,6 +308,7 @@ module Discharger
         unless system("gh --version > /dev/null 2>&1")
           abort "Error: GitHub CLI (gh) is required for the release process but was not found. Install it: https://cli.github.com"
         end
+        validate_pr_label!
 
         current_version = Object.const_get(version_constant)
 
@@ -369,20 +396,26 @@ module Discharger
 
         new_version_branch = `git rev-parse --abbrev-ref HEAD`.strip
         new_version = new_version_branch.split("/").last
-        params = {expand: 1, title: "Bump version to #{new_version}"}
-        pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
 
-        syscall(["git push origin #{new_version_branch} --force"]) do
-          sysecho <<~MSG
-            Branch #{new_version_branch} created.
+        if pr_label
+          syscall(["git push origin #{new_version_branch} --force"])
+          create_labeled_pr!(head: new_version_branch, title: "Bump version to #{new_version}", body: "")
+        else
+          params = {expand: 1, title: "Bump version to #{new_version}"}
+          pr_url = "#{pull_request_url}/compare/#{working_branch}...#{new_version_branch}?#{params.to_query}"
 
-            Open a PR to #{working_branch} to mark the version and update the chaneglog
-            for the next release.
+          syscall(["git push origin #{new_version_branch} --force"]) do
+            sysecho <<~MSG
+              Branch #{new_version_branch} created.
 
-            Opening PR: #{pr_url}
-          MSG
-        end.then do |success|
-          syscall ["open", pr_url] if success
+              Open a PR to #{working_branch} to mark the version and update the chaneglog
+              for the next release.
+
+              Opening PR: #{pr_url}
+            MSG
+          end.then do |success|
+            syscall ["open", pr_url] if success
+          end
         end
       end
 
@@ -453,6 +486,7 @@ module Discharger
         DESC
         task prepare: [:environment] do
           ensure_clean_worktree!
+          validate_pr_label!
 
           current_version = Object.const_get(version_constant)
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
@@ -482,34 +516,51 @@ module Discharger
 
           tasker["reissue:finalize"].invoke
 
-          params = {
-            expand: 1,
-            title: "Finish version #{current_version}",
-            body: <<~BODY
-              Completing development for #{current_version}.
-            BODY
-          }
-
-          pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
-
           next_step = auto_deploy_staging ? "rake #{name}" : "rake #{name}:stage"
           next_step_desc = auto_deploy_staging ? "release to production" : "stage the release branch"
 
-          continue = syscall ["git push origin #{finish_branch} --force"] do
+          if pr_label
+            syscall ["git push origin #{finish_branch} --force"]
+            create_labeled_pr!(
+              head: finish_branch,
+              title: "Finish version #{current_version}",
+              body: "Completing development for #{current_version}."
+            )
             sysecho <<~MSG
-              Branch #{finish_branch} created.
-              Open a PR to #{working_branch} to finalize the release.
-
-              #{pr_url}
+              Branch #{finish_branch} pushed and its PR labeled '#{pr_label}'.
 
               Once the PR is merged, pull down #{working_branch} and run
                 '#{next_step}'
               to #{next_step_desc}.
             MSG
-          end
-          if continue
-            syscall ["git checkout #{working_branch}"],
-              ["open", pr_url]
+            syscall ["git checkout #{working_branch}"]
+          else
+            params = {
+              expand: 1,
+              title: "Finish version #{current_version}",
+              body: <<~BODY
+                Completing development for #{current_version}.
+              BODY
+            }
+
+            pr_url = "#{pull_request_url}/compare/#{finish_branch}?#{params.to_query}"
+
+            continue = syscall ["git push origin #{finish_branch} --force"] do
+              sysecho <<~MSG
+                Branch #{finish_branch} created.
+                Open a PR to #{working_branch} to finalize the release.
+
+                #{pr_url}
+
+                Once the PR is merged, pull down #{working_branch} and run
+                  '#{next_step}'
+                to #{next_step_desc}.
+              MSG
+            end
+            if continue
+              syscall ["git checkout #{working_branch}"],
+                ["open", pr_url]
+            end
           end
         end
 

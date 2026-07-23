@@ -246,7 +246,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     $stdin = @original_stdin
   end
 
-  def build_task(name, auto_deploy:)
+  def build_task(name, auto_deploy:, pr_label: nil)
     noop_task = Object.new
     noop_task.define_singleton_method(:invoke) { |*_args| }
     noop_task.define_singleton_method(:reenable) {}
@@ -263,6 +263,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.app_name = "TestApp"
     task.commit_identifier = -> { "abc123" }
     task.auto_deploy_staging = auto_deploy
+    task.pr_label = pr_label
 
     commands = @commands
     task.define_singleton_method(:syscall) do |*steps, **_kwargs, &_block|
@@ -350,6 +351,53 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Unpushed-commit check must run before the reset"
   end
 
+  def test_prepare_creates_labeled_pr_when_pr_label_is_set
+    task = build_task(:rel_prep_label, auto_deploy: true, pr_label: "no-changelog-needed")
+    task.define_singleton_method(:ensure_clean_worktree!) { true }
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch| true }
+    task.define_singleton_method(:validate_pr_label!) { true }
+    task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prep_label:prepare"].invoke }
+
+    assert command_issued?("gh pr create --base develop --head bump/finish-1-2-3 --title 'Finish version 1.2.3' --body 'Completing development for 1.2.3.' --label 'no-changelog-needed'"),
+      "Should create the finish PR with the configured label"
+    refute command_issued?(/^open /),
+      "Should not open a browser compare page when the PR is created directly"
+  end
+
+  def test_prepare_keeps_compare_url_flow_without_pr_label
+    task = build_task(:rel_prep_nolabel, auto_deploy: true)
+    task.define_singleton_method(:ensure_clean_worktree!) { true }
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch| true }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prep_nolabel:prepare"].invoke }
+
+    refute command_issued?(/gh pr create/),
+      "Should not create a PR without a configured label"
+    assert command_issued?(/^open http/),
+      "Should open the compare URL"
+  end
+
+  def test_release_creates_labeled_bump_pr_when_pr_label_is_set
+    task = build_task(:rel_bump_label, auto_deploy: true, pr_label: "no-changelog-needed")
+    task.define_singleton_method(:validate_pr_label!) { true }
+    task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_bump_label"].invoke }
+
+    assert command_issued?(/gh pr create --base develop --head \S+ --title 'Bump version to \S+' --body '' --label 'no-changelog-needed'/),
+      "Should create the bump PR with the configured label"
+    refute command_issued?(/^open /),
+      "Should not open a browser compare page for the bump PR"
+  end
+
   def test_standard_mode_skips_merge_when_pr_already_merged
     task = build_task(:rel_merged_seq, auto_deploy: false)
     task.define_singleton_method(:pr_already_merged?) { |_ref| true }
@@ -424,6 +472,65 @@ class DischargerReleasePreconditionTest < Minitest::Test
     @task.ensure_branch_not_ahead!("develop")
 
     assert_includes captured, "origin/develop..develop"
+  end
+
+  def test_validate_pr_label_returns_true_without_label
+    assert @task.validate_pr_label!
+  end
+
+  def test_validate_pr_label_queries_the_configured_label
+    @task.pr_label = "no-changelog-needed"
+    captured = nil
+    status = FakeStatus.new(true)
+    Open3.define_singleton_method(:capture3) { |*args|
+      captured = args
+      ["", "", status]
+    }
+
+    assert @task.validate_pr_label!
+    assert_equal ["gh", "label", "view", "no-changelog-needed"], captured
+  end
+
+  def test_validate_pr_label_aborts_when_label_is_missing
+    @task.pr_label = "no-changelog-needed"
+    stub_capture3("", "not found", false)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.validate_pr_label! }
+    end
+  end
+
+  def test_create_labeled_pr_creates_pr_with_label
+    @task.pr_label = "no-changelog-needed"
+    @task.define_singleton_method(:existing_pr_number) { |*_args| nil }
+    created = nil
+    @task.define_singleton_method(:syscall) { |*steps|
+      created = steps
+      true
+    }
+
+    @task.create_labeled_pr!(head: "bump/finish-1-2-3", title: "Finish version 1.2.3", body: "Completing development for 1.2.3.")
+
+    assert_equal [["gh pr create --base develop --head bump/finish-1-2-3 --title 'Finish version 1.2.3' --body 'Completing development for 1.2.3.' --label 'no-changelog-needed'"]], created
+  end
+
+  def test_create_labeled_pr_reuses_existing_pr
+    @task.pr_label = "no-changelog-needed"
+    @task.define_singleton_method(:existing_pr_number) { |*_args| "17" }
+    created = false
+    @task.define_singleton_method(:syscall) { |*_steps|
+      created = true
+    }
+    echoed = nil
+    @task.define_singleton_method(:sysecho) { |message, **_kwargs|
+      echoed = message
+      true
+    }
+
+    @task.create_labeled_pr!(head: "bump/finish-1-2-3", title: "Finish version 1.2.3", body: "")
+
+    refute created, "Should not run gh pr create when a PR already exists"
+    assert_match(/Reusing existing PR #17/, echoed)
   end
 end
 
