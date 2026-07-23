@@ -25,6 +25,7 @@ module Discharger
         reissue.clear_fragments = task.clear_fragments
         reissue.tag_pattern = task.tag_pattern
         reissue.runbook_file = task.runbook_file
+        reissue.retain_changelogs = task.retain_changelogs
       end
       task.define
       task

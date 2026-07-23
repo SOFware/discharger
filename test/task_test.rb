@@ -59,6 +59,28 @@ class DischargerTaskTest < Minitest::Test
     Reissue::Task.define_singleton_method(:create, original_create)
   end
 
+  def test_create_forwards_retain_changelogs_to_reissue
+    retainer = ->(version_hash, content) { [version_hash, content] }
+    captured_retain_changelogs = nil
+
+    original_create = Reissue::Task.method(:create)
+    Reissue::Task.define_singleton_method(:create) do |name = :reissue, &block|
+      reissue_task = Reissue::Task.new(name)
+      block&.call(reissue_task)
+      captured_retain_changelogs = reissue_task.retain_changelogs
+      reissue_task
+    end
+
+    Discharger::Task.create(:test_retain_changelogs) do
+      self.version_file = "VERSION"
+      self.retain_changelogs = retainer
+    end
+
+    assert_equal retainer, captured_retain_changelogs
+  ensure
+    Reissue::Task.define_singleton_method(:create, original_create)
+  end
+
   def test_syscall_success
     output = StringIO.new
     assert_output(/Hello, World!/) do
