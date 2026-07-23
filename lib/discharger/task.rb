@@ -185,6 +185,25 @@ module Discharger
       stdout
     end
 
+    def ensure_clean_worktree!
+      stdout, _, status = Open3.capture3("git", "status", "--porcelain")
+      return true if status.success? && stdout.empty?
+
+      abort "Working tree has uncommitted changes. Commit or stash them before running rake #{name}:prepare."
+    end
+
+    # Guards the reset --hard below from discarding unpushed local commits.
+    def ensure_branch_not_ahead!(branch)
+      stdout, _, status = Open3.capture3("git", "rev-list", "--count", "origin/#{branch}..#{branch}")
+      return true if status.success? && stdout.strip == "0"
+
+      abort <<~ERROR.bg(:red).white
+        Local #{branch} has commits not on origin/#{branch}. Refusing to reset --hard.
+
+        Push or remove them before retrying.
+      ERROR
+    end
+
     # The post-release steps collected from "Runbook:" commit trailers.
     # Empty when no runbook is configured or the file has yet to be written.
     def runbook_items
@@ -433,12 +452,20 @@ module Discharger
           the release.
         DESC
         task prepare: [:environment] do
+          ensure_clean_worktree!
+
           current_version = Object.const_get(version_constant)
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
 
           syscall(
             ["git fetch origin #{working_branch}"],
-            ["git checkout #{working_branch}"],
+            ["git checkout #{working_branch}"]
+          )
+          ensure_branch_not_ahead!(working_branch)
+          # Cut the finish branch from origin, not the local branch: a stale
+          # local working branch finalizes with an empty changelog.
+          syscall(
+            ["git reset --hard origin/#{working_branch}"],
             ["git checkout -b #{finish_branch}"]
           )
           sysecho <<~MSG

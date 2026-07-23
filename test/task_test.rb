@@ -324,6 +324,32 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should reset working branch to match remote"
   end
 
+  def test_prepare_resets_working_branch_from_origin_before_branching
+    task = build_task(:rel_prep_seq, auto_deploy: true)
+    ahead_checked_at = nil
+    commands = @commands
+    task.define_singleton_method(:ensure_clean_worktree!) { true }
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch|
+      ahead_checked_at = commands.length
+      true
+    }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_prep_seq:prepare"].invoke }
+
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+    branch_idx = @commands.index { |c| c.join(" ") == "git checkout -b bump/finish-1-2-3" }
+
+    assert reset_idx, "Expected a reset from origin"
+    assert branch_idx, "Expected the finish branch to be created"
+    assert_operator reset_idx, :<, branch_idx,
+      "Finish branch must be cut after resetting to origin"
+    assert ahead_checked_at, "Expected the unpushed-commit check to run"
+    assert_operator ahead_checked_at, :<=, reset_idx,
+      "Unpushed-commit check must run before the reset"
+  end
+
   def test_standard_mode_skips_merge_when_pr_already_merged
     task = build_task(:rel_merged_seq, auto_deploy: false)
     task.define_singleton_method(:pr_already_merged?) { |_ref| true }
@@ -338,6 +364,66 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should still tag production branch"
     assert command_issued?("git push origin v1.2.3"),
       "Should still push the tag"
+  end
+end
+
+class DischargerReleasePreconditionTest < Minitest::Test
+  FakeStatus = Struct.new(:ok) do
+    def success? = ok
+  end
+
+  def setup
+    @task = Discharger::Task.new
+    @original_capture3 = Open3.method(:capture3)
+  end
+
+  def teardown
+    Open3.define_singleton_method(:capture3, @original_capture3)
+  end
+
+  def stub_capture3(stdout, stderr, success)
+    status = FakeStatus.new(success)
+    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
+  end
+
+  def test_ensure_clean_worktree_allows_clean_checkout
+    stub_capture3("", "", true)
+
+    assert @task.ensure_clean_worktree!
+  end
+
+  def test_ensure_clean_worktree_aborts_on_dirty_checkout
+    stub_capture3(" M CHANGELOG.md\n", "", true)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.ensure_clean_worktree! }
+    end
+  end
+
+  def test_ensure_branch_not_ahead_passes_when_count_is_zero
+    stub_capture3("0\n", "", true)
+    assert @task.ensure_branch_not_ahead!("develop")
+  end
+
+  def test_ensure_branch_not_ahead_aborts_when_local_has_unpushed_commits
+    stub_capture3("3\n", "", true)
+
+    assert_raises(SystemExit) do
+      capture_io { @task.ensure_branch_not_ahead!("develop") }
+    end
+  end
+
+  def test_ensure_branch_not_ahead_counts_commits_missing_from_origin
+    captured = nil
+    status = FakeStatus.new(true)
+    Open3.define_singleton_method(:capture3) { |*args|
+      captured = args
+      ["0\n", "", status]
+    }
+
+    @task.ensure_branch_not_ahead!("develop")
+
+    assert_includes captured, "origin/develop..develop"
   end
 end
 
