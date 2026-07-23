@@ -135,32 +135,30 @@ module Discharger
       ERROR
     end
 
-    # Abort if HEAD is not the commit that last touched the version file
-    def validate_release_commit!(branch, output: $stdout)
-      head_sha = git_local_sha(branch)
-      release_sha = git_version_file_commit(branch)
+    # Locate the commit that finalized changelog_file for the current version.
+    # Deliberately not a gate on HEAD: PRs that merge after the finalize PR
+    # must neither block the release nor ship under its tag.
+    def find_release_commit!(branch, output: $stdout)
+      version = Object.const_get(version_constant)
+      version_header = /^## \[#{Regexp.escape(version)}\] - \d{4}-\d{2}-\d{2}/
+      sha = git_file_commits(branch, changelog_file).find do |candidate_sha|
+        next false if git_merge_commit?(candidate_sha)
 
-      if head_sha.nil? || release_sha.nil?
+        contents = git_show_at_commit(candidate_sha, changelog_file)
+        parent_contents = git_show_at_commit("#{candidate_sha}^", changelog_file)
+
+        contents&.match?(version_header) && !parent_contents&.match?(version_header)
+      end
+
+      if sha.nil?
         abort <<~ERROR.bg(:red).white
-          Could not determine release commit.
-
-          HEAD:           #{head_sha || "not found"}
-          Release commit: #{release_sha || "not found"}
-
-          Ensure #{branch} exists and #{version_file} has been modified.
+          Could not locate a release commit.
+          Ensure #{branch} exists and #{changelog_file} has been finalized for #{version}.
         ERROR
       end
 
-      return sysecho("✓ HEAD is the release commit (#{head_sha[0, 8]})".bg(:green).black, output:) if head_sha == release_sha
-
-      abort <<~ERROR.bg(:red).white
-        HEAD is not the release commit!
-
-        HEAD:           #{head_sha[0, 8]}
-        Release commit: #{release_sha[0, 8]} (last commit to touch #{version_file})
-
-        Something was merged after the release PR. Verify the branch contents and retry.
-      ERROR
+      sysecho("✓ Release commit: #{sha[0, 8]}".bg(:green).black, output:)
+      sha
     end
 
     def git_show_version(branch)
@@ -169,16 +167,22 @@ module Discharger
       content[/VERSION\s*=\s*["']([^"']+)["']/, 1]
     end
 
-    def git_local_sha(branch)
-      stdout, _, status = Open3.capture3("git", "rev-parse", branch)
-      return nil unless status.success?
-      stdout.strip
+    def git_file_commits(branch, path)
+      stdout, _, status = Open3.capture3("git", "log", "--no-merges", branch, "--format=%H", "--", path)
+      return [] unless status.success?
+      stdout.lines.map(&:strip)
     end
 
-    def git_version_file_commit(branch)
-      stdout, _, status = Open3.capture3("git", "log", branch, "-1", "--format=%H", "--", version_file)
+    def git_merge_commit?(sha)
+      stdout, _, status = Open3.capture3("git", "rev-list", "--parents", "-n", "1", sha)
+      return false unless status.success?
+      stdout.split.length > 2
+    end
+
+    def git_show_at_commit(sha, path)
+      stdout, _, status = Open3.capture3("git", "show", "#{sha}:#{path}")
       return nil unless status.success?
-      stdout.strip
+      stdout
     end
 
     # The post-release steps collected from "Runbook:" commit trailers.
@@ -266,10 +270,16 @@ module Discharger
         # instead of staging_branch (for CI/CD pipelines that auto-deploy staging)
         release_source = auto_deploy_staging ? working_branch : staging_branch
 
+        release_action = if auto_deploy_staging
+          "This will tag the release commit on #{working_branch} and push the tag."
+        else
+          "This will tag the current version and push it to the production branch."
+        end
+
         sysecho <<~MSG
           Releasing version #{current_version} to production.
 
-          This will tag the current version and push it to the production branch.
+          #{release_action}
           Release source: #{release_source}
         MSG
         sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
@@ -284,48 +294,41 @@ module Discharger
 
         if auto_deploy_staging
           syscall(
-            ["git fetch origin #{production_branch}:#{production_branch} #{working_branch}"],
+            ["git fetch origin #{working_branch}"],
             ["git reset --hard origin/#{working_branch}"]
           )
-          validate_release_commit!(release_source)
+          # Tag the finalize commit itself: origin/working_branch may already
+          # carry work merged after the finalize PR.
+          tag_ref = find_release_commit!(release_source)
         else
           syscall(
             ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
           )
           validate_version_match!(staging_branch, working_branch)
-        end
 
-        pr_ref = release_source
-        if auto_deploy_staging
-          pr_number = existing_pr_number(production_branch, release_source)
-          if pr_number
-            sysecho "Reusing existing PR ##{pr_number} from #{release_source} to #{production_branch}."
-            pr_ref = pr_number
+          pr_ref = release_source
+          if pr_already_merged?(pr_ref)
+            sysecho "PR #{pr_ref} is already merged. Continuing..."
           else
             syscall(
-              ["gh pr create --base #{production_branch} --head #{release_source} --title 'Release #{current_version}' --body 'Deploy #{current_version} to production.'"]
+              ["gh pr merge #{pr_ref} --merge"]
             )
           end
+
+          syscall(["git fetch origin #{production_branch}:#{production_branch}"])
+          tag_ref = production_branch
         end
 
-        if pr_already_merged?(pr_ref)
-          sysecho "PR #{pr_ref} is already merged. Continuing..."
-        else
-          syscall(
-            ["gh pr merge #{pr_ref} --merge"]
-          )
-        end
-
+        slack_sha = auto_deploy_staging ? tag_ref[0, 8] : commit_identifier.call
         continue = syscall(
-          ["git fetch origin #{production_branch}:#{production_branch}"],
-          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{production_branch}"],
+          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{tag_ref}"],
           ["git push origin v#{current_version}"]
         ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{commit_identifier.call}) to production.", release_message_channel, ":chipmunk:")
+          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{slack_sha}) to production.", release_message_channel, ":chipmunk:")
           # Capture the root before replying; each post overwrites last_message_ts.
           thread_ts = last_message_ts
           if thread_ts.present?
-            text = File.read(Rails.root.join(changelog_file))
+            text = git_show_at_commit(tag_ref, changelog_file) || File.read(Rails.root.join(changelog_file))
             tasker["#{name}:slack"].reenable
             tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", thread_ts)
 
