@@ -49,6 +49,8 @@ steps:
   - brew
   - asdf
   - git
+  # Uncomment with the github_packages block above. Must precede bundler.
+  # - github_packages
   - bundler
   - yarn
   - config
