@@ -11,6 +11,7 @@ class ConfigurationTest < ActiveSupport::TestCase
     assert_equal "Application", config.app_name
     assert_instance_of Discharger::SetupRunner::DatabaseConfig, config.database
     assert_nil config.redis
+    assert_nil config.github_packages
     assert_equal [], config.services
     assert_equal [], config.steps
     assert_equal [], config.custom_steps
@@ -29,6 +30,8 @@ class ConfigurationTest < ActiveSupport::TestCase
         port: 6380
         name: my-redis
         version: "7.0"
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
       services:
         - elasticsearch
         - rabbitmq
@@ -55,6 +58,7 @@ class ConfigurationTest < ActiveSupport::TestCase
     assert_equal 6380, config.redis.port
     assert_equal "my-redis", config.redis.name
     assert_equal "7.0", config.redis.version
+    assert_equal "https://rubygems.pkg.github.com/example", config.github_packages.source
     assert_equal ["elasticsearch", "rabbitmq"], config.services
     assert_equal ["brew", "bundler"], config.steps
     assert_equal [{"name" => "custom_task", "command" => "echo \"custom\""}], config.custom_steps
@@ -79,6 +83,8 @@ class ConfigurationTest < ActiveSupport::TestCase
     assert_equal "14", config.database.version
     # Redis not configured in YAML, so should be nil
     assert_nil config.redis
+    # GitHub Packages not configured in YAML, so should be nil
+    assert_nil config.github_packages
   end
 
   test "handles empty YAML file" do

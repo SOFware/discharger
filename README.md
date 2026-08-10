@@ -274,6 +274,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `brew` - Install Homebrew dependencies
 - `asdf` - Setup version management with asdf
 - `git` - Configure git settings
+- `github_packages` - Store bundler credentials for a private GitHub Packages gem source using the GitHub CLI (run before `bundler`; requires a `github_packages.source` config entry)
 - `bundler` - Install Ruby gems
 - `yarn` - Install JavaScript packages
 - `config` - Copy configuration files

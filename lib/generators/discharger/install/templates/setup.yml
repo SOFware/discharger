@@ -18,6 +18,14 @@ redis:
   name: "redis-your-app"
   version: "latest"
 
+# Private GitHub Packages gem source (optional)
+# Stores bundler credentials from the GitHub CLI (gh) so the Gemfile
+# doesn't need an embedded token. Add "github_packages" to steps, before
+# "bundler". Credentials are written to .bundle/config — keep .bundle
+# gitignored.
+# github_packages:
+#   source: "https://rubygems.pkg.github.com/your-org"
+
 # Pre-Rails steps (run BEFORE Rails loads)
 # These are for system dependencies and environment setup that must happen
 # before bundler/Rails can initialize. Use sparingly.
@@ -36,7 +44,7 @@ pre_steps: []
   # - postgresql_tools # Optional: for apps that use structure.sql or pg_dump/psql directly
 
 # Built-in commands to run (empty array runs all available commands)
-# Available commands: brew, asdf, git, bundler, yarn, config, docker, pg_tools, env, database
+# Available commands: brew, asdf, git, github_packages, bundler, yarn, config, docker, pg_tools, env, database
 steps:
   - brew
   - asdf
