@@ -173,6 +173,14 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       Discharger::SetupRunner::CommandRegistry.get("github_packages")
   end
 
+  test "github_packages runs before bundler when no steps are configured" do
+    require "discharger/setup_runner/command_registry"
+    names = Discharger::SetupRunner::CommandRegistry.ordered_names
+
+    assert_operator names.index("github_packages"), :<, names.index("bundler"),
+      "credentials must be stored before bundler installs from the private source"
+  end
+
   private
 
   # Captures the argv Open3.capture3 is called with so the credential write

@@ -3,6 +3,24 @@
 module Discharger
   module SetupRunner
     class CommandRegistry
+      # The order built-in steps run in when setup.yml configures no steps.
+      # Registration order cannot be relied on here: it comes from enumerating
+      # Commands.constants, which shifts with require order. Credentials and
+      # toolchains have to be in place before bundler resolves gems.
+      DEFAULT_ORDER = %w[
+        brew
+        asdf
+        git
+        github_packages
+        bundler
+        yarn
+        config
+        docker
+        pg_tools
+        env
+        database
+      ].freeze
+
       class << self
         def register(name, command_class)
           commands[name.to_s] = command_class
@@ -18,6 +36,12 @@ module Discharger
 
         def names
           commands.keys
+        end
+
+        # Registered names in pipeline order, with anything outside
+        # DEFAULT_ORDER (custom commands) appended in registration order.
+        def ordered_names
+          (DEFAULT_ORDER & names) + (names - DEFAULT_ORDER)
         end
 
         def clear

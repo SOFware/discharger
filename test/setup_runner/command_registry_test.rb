@@ -109,4 +109,23 @@ class CommandRegistryTest < ActiveSupport::TestCase
     assert_empty registry.all
     assert_empty registry.names
   end
+
+  test "ordered_names sorts registered commands into pipeline order" do
+    registry = Discharger::SetupRunner::CommandRegistry
+
+    registry.register("bundler", TestCommand)
+    registry.register("github_packages", TestCommand)
+    registry.register("brew", TestCommand)
+
+    assert_equal %w[brew github_packages bundler], registry.ordered_names
+  end
+
+  test "ordered_names appends commands with no default position" do
+    registry = Discharger::SetupRunner::CommandRegistry
+
+    registry.register("deploy_keys", TestCommand)
+    registry.register("bundler", AnotherTestCommand)
+
+    assert_equal %w[bundler deploy_keys], registry.ordered_names
+  end
 end

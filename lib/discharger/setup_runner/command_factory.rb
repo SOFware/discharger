@@ -37,7 +37,7 @@ module Discharger
           end
         else
           # If no steps specified, create all registered commands
-          CommandRegistry.names.each do |name|
+          CommandRegistry.ordered_names.each do |name|
             command = create_command(name)
             commands << command if command
           end

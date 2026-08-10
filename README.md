@@ -295,7 +295,7 @@ steps:
   - yarn
 ```
 
-Leave the array empty or omit it entirely to run all available steps.
+Leave the array empty or omit it entirely to run all available steps, in the order listed above. Custom commands registered through `Discharger::SetupRunner.register_command` run last.
 
 ### Adding Custom Commands
 
