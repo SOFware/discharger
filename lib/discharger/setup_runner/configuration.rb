@@ -5,12 +5,13 @@ require "yaml"
 module Discharger
   module SetupRunner
     class Configuration
-      attr_accessor :app_name, :database, :redis, :services, :steps, :custom_steps, :pre_steps
+      attr_accessor :app_name, :database, :redis, :github_packages, :services, :steps, :custom_steps, :pre_steps
 
       def initialize
         @app_name = "Application"
         @database = DatabaseConfig.new
         @redis = nil
+        @github_packages = nil
         @services = []
         @steps = []
         @custom_steps = []
@@ -27,6 +28,7 @@ module Discharger
         config.app_name = yaml["app_name"] if yaml["app_name"]
         config.database.from_hash(yaml["database"]) if yaml["database"]
         config.redis = RedisConfig.new.tap { |r| r.from_hash(yaml["redis"]) } if yaml["redis"]
+        config.github_packages = GithubPackagesConfig.new.tap { |g| g.from_hash(yaml["github_packages"]) } if yaml["github_packages"]
         config.services = yaml["services"] || []
         config.steps = yaml["steps"] || []
         config.custom_steps = yaml["custom_steps"] || []
@@ -53,6 +55,18 @@ module Discharger
         @version = hash["version"] if hash["version"]
         @password = hash["password"] if hash["password"]
         @prefer_docker = hash["prefer_docker"] if hash.key?("prefer_docker")
+      end
+    end
+
+    class GithubPackagesConfig
+      attr_accessor :source
+
+      def initialize
+        @source = nil
+      end
+
+      def from_hash(hash)
+        @source = hash["source"] if hash["source"]
       end
     end
 
