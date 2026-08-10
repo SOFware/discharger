@@ -48,7 +48,7 @@ module Discharger
         protected
 
         def source
-          config.github_packages&.source if config.respond_to?(:github_packages)
+          config.github_packages&.source
         end
 
         def gh_installed?
