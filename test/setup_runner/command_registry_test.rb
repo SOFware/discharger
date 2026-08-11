@@ -120,6 +120,17 @@ class CommandRegistryTest < ActiveSupport::TestCase
     assert_equal %w[brew github_packages bundler], registry.ordered_names
   end
 
+  test "load_commands does not register the custom placeholder" do
+    registry = Discharger::SetupRunner::CommandRegistry
+
+    registry.load_commands
+
+    assert_includes registry.names, "bundler"
+    refute_includes registry.names, "custom",
+      "CustomCommand needs a step_config and is built from custom_steps; " \
+      "registering it by name only produces construction failures"
+  end
+
   test "ordered_names appends commands with no default position" do
     registry = Discharger::SetupRunner::CommandRegistry
 

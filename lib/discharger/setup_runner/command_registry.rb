@@ -65,6 +65,9 @@ module Discharger
             command_class = Commands.const_get(const_name)
             next unless command_class < Commands::BaseCommand
             next if command_class == Commands::BaseCommand
+            # Not schedulable by name: it takes a step_config argument and is
+            # instantiated by CommandFactory from custom_steps entries.
+            next if command_class == Commands::CustomCommand
 
             # Convert class name to command name (e.g., AsdfCommand -> asdf)
             command_name = const_name.to_s.sub(/Command$/, "").gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, "")
