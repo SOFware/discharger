@@ -8,6 +8,7 @@ require "socket"
 
 class GithubPackagesCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
+  include Capture3Stubbing
 
   SOURCE = "https://rubygems.pkg.github.com/example"
 
@@ -167,6 +168,51 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     refute_match(/read:packages/, io.string)
   end
 
+  test "unscheduled_warning names the source when nothing schedules the command" do
+    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+
+    assert_match(/missing from steps/, message)
+    assert_includes message, SOURCE
+  end
+
+  test "unscheduled_warning returns nil without a github_packages accessor" do
+    duck = Struct.new(:steps, :custom_steps).new(%w[env], [])
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(duck)
+  end
+
+  test "unscheduled_warning returns nil when a custom step references the source" do
+    @config.custom_steps = [{"description" => "creds", "command" => "bundle config set --local #{SOURCE} user:token"}]
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+  end
+
+  test "unscheduled_warning ignores source references in steps whose condition is false" do
+    @config.custom_steps = [{
+      "description" => "creds",
+      "command" => "bundle config set --local #{SOURCE} user:token",
+      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
+    }]
+
+    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+
+    refute_nil message, "a step skipped by its condition stores nothing this run"
+    assert_match(/missing from steps/, message)
+  end
+
+  test "unscheduled_warning stays quiet when the referencing step's condition is true" do
+    ENV["DISCHARGER_TEST_CREDS"] = "true"
+    @config.custom_steps = [{
+      "description" => "creds",
+      "command" => "bundle config set --local #{SOURCE} user:token",
+      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
+    }]
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+  ensure
+    ENV.delete("DISCHARGER_TEST_CREDS")
+  end
+
   test "command is registered as github_packages" do
     require "discharger/setup_runner/command_registry"
     assert_equal Discharger::SetupRunner::Commands::GithubPackagesCommand,
@@ -184,23 +230,6 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
   end
 
   private
-
-  # Captures the argv Open3.capture3 is called with so the credential write
-  # can be asserted without shelling out to a real bundler.
-  def stub_capture3(success:, stderr: "")
-    calls = []
-    original = Open3.method(:capture3)
-    status = Object.new
-    status.define_singleton_method(:success?) { success }
-    Open3.define_singleton_method(:capture3) do |*args|
-      calls << args
-      ["", stderr, status]
-    end
-    yield
-    calls
-  ensure
-    Open3.define_singleton_method(:capture3, original)
-  end
 
   # A command with real credential probing against the given source;
   # everything before the probe is stubbed to succeed.

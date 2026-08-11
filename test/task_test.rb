@@ -299,72 +299,54 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
 end
 
 class DischargerPrAlreadyMergedTest < Minitest::Test
-  FakeStatus = Struct.new(:ok) do
-    def success? = ok
-  end
+  include Capture3Stubbing
 
   def setup
     @task = Discharger::Task.new
-    @original_capture3 = Open3.method(:capture3)
-  end
-
-  def teardown
-    Open3.define_singleton_method(:capture3, @original_capture3)
-  end
-
-  def stub_capture3(stdout, stderr, success)
-    status = FakeStatus.new(success)
-    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
   end
 
   def test_returns_true_when_pr_is_merged
-    stub_capture3("MERGED\n", "", true)
-    assert @task.pr_already_merged?("stage")
+    stub_capture3(stdout: "MERGED\n") do
+      assert @task.pr_already_merged?("stage")
+    end
   end
 
   def test_returns_false_when_pr_is_open
-    stub_capture3("OPEN\n", "", true)
-    refute @task.pr_already_merged?("stage")
+    stub_capture3(stdout: "OPEN\n") do
+      refute @task.pr_already_merged?("stage")
+    end
   end
 
   def test_returns_false_on_command_failure
-    stub_capture3("", "error", false)
-    refute @task.pr_already_merged?("stage")
+    stub_capture3(stderr: "error", success: false) do
+      refute @task.pr_already_merged?("stage")
+    end
   end
 end
 
 class DischargerExistingPrNumberTest < Minitest::Test
-  FakeStatus = Struct.new(:ok) do
-    def success? = ok
-  end
+  include Capture3Stubbing
 
   def setup
     @task = Discharger::Task.new
-    @original_capture3 = Open3.method(:capture3)
-  end
-
-  def teardown
-    Open3.define_singleton_method(:capture3, @original_capture3)
-  end
-
-  def stub_capture3(stdout, stderr, success)
-    status = FakeStatus.new(success)
-    Open3.define_singleton_method(:capture3) { |*_args| [stdout, stderr, status] }
   end
 
   def test_returns_pr_number_when_pr_exists
-    stub_capture3("42\n", "", true)
-    assert_equal "42", @task.existing_pr_number("main", "develop")
+    stub_capture3(stdout: "42\n") do
+      assert_equal "42", @task.existing_pr_number("main", "develop")
+    end
   end
 
   def test_returns_nil_when_no_pr_exists
-    stub_capture3("", "", true)
-    assert_nil @task.existing_pr_number("main", "develop")
+    stub_capture3 do
+      assert_nil @task.existing_pr_number("main", "develop")
+    end
   end
 
   def test_returns_nil_on_command_failure
-    stub_capture3("", "error", false)
-    assert_nil @task.existing_pr_number("main", "develop")
+    stub_capture3(stderr: "error", success: false) do
+      assert_nil @task.existing_pr_number("main", "develop")
+    end
   end
 end
 

@@ -78,6 +78,62 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
         - env
     YAML
 
+    # Swap in a no-op subclass so the test never shells out to gh or the
+    # network; the real command would probe the source with live credentials.
+    registry = Discharger::SetupRunner::CommandRegistry
+    original = registry.get("github_packages")
+    noop = Class.new(original) do
+      def execute
+      end
+    end
+    registry.register("github_packages", noop)
+
+    io = StringIO.new
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", Logger.new(io))
+    end
+
+    refute_match(/missing from steps/, io.string)
+  ensure
+    registry.register("github_packages", original) if original
+  end
+
+  test "stays quiet when github_packages is scheduled programmatically" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
+      steps:
+        - env
+    YAML
+
+    noop = Class.new(Discharger::SetupRunner::Commands::GithubPackagesCommand) do
+      def execute
+      end
+    end
+
+    io = StringIO.new
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", Logger.new(io)) do |runner|
+        runner.add_command(noop.new(runner.config, Dir.pwd, runner.logger))
+      end
+    end
+
+    refute_match(/missing from steps/, io.string)
+  end
+
+  test "stays quiet when a custom step references the source" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
+      steps:
+        - env
+      custom_steps:
+        - description: "Store credentials"
+          command: "echo https://rubygems.pkg.github.com/example >/dev/null"
+    YAML
+
     io = StringIO.new
     capture_output do
       Discharger::SetupRunner.run("setup.yml", Logger.new(io))
