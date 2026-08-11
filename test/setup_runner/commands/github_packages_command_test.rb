@@ -167,6 +167,25 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     refute_match(/read:packages/, io.string)
   end
 
+  test "unscheduled_warning names the source when nothing schedules the command" do
+    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+
+    assert_match(/missing from steps/, message)
+    assert_includes message, SOURCE
+  end
+
+  test "unscheduled_warning returns nil without a github_packages accessor" do
+    duck = Struct.new(:steps, :custom_steps).new(%w[env], [])
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(duck)
+  end
+
+  test "unscheduled_warning returns nil when a custom step references the source" do
+    @config.custom_steps = [{"description" => "creds", "command" => "bundle config set --local #{SOURCE} user:token"}]
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+  end
+
   test "command is registered as github_packages" do
     require "discharger/setup_runner/command_registry"
     assert_equal Discharger::SetupRunner::Commands::GithubPackagesCommand,

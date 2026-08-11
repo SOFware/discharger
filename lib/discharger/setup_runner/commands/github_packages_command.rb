@@ -10,6 +10,26 @@ module Discharger
       # Credentials are written to the app's .bundle/config — keep .bundle
       # gitignored. Run this step before "bundler" in setup.yml.
       class GithubPackagesCommand < BaseCommand
+        # A configured source with nothing scheduled to store its credentials
+        # is inert, and the only symptom is bundler failing against the
+        # private source. The Runner surfaces this before executing commands.
+        # Guarded for duck-typed configs passed to the public Runner API, and
+        # quiet when a custom step's command references the source (assumed
+        # to handle credentials itself).
+        def self.unscheduled_warning(config)
+          return unless config.respond_to?(:github_packages)
+
+          source = config.github_packages&.source
+          return if source.to_s.empty?
+          if config.respond_to?(:custom_steps) &&
+              config.custom_steps.any? { |step| step["command"].to_s.include?(source) }
+            return
+          end
+
+          "github_packages is configured but missing from steps; " \
+            "credentials will not be stored and bundler may fail for #{source}"
+        end
+
         def execute
           unless gh_installed?
             log "GitHub CLI (gh) not found; skipping. Install gh and rerun setup or `bundle install` may fail for #{source}"

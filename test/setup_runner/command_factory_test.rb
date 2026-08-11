@@ -136,6 +136,15 @@ class CommandFactoryTest < ActiveSupport::TestCase
     refute_match(/Failed to create command/, io.string)
   end
 
+  test "tolerates config objects without a github_packages accessor" do
+    duck = Struct.new(:steps, :custom_steps).new(%w[env], [])
+    factory = Discharger::SetupRunner::CommandFactory.new(duck, Dir.pwd, Logger.new(StringIO.new))
+
+    commands = factory.create_all_commands
+
+    assert_equal 1, commands.size
+  end
+
   private
 
   def config_with(steps:, custom_steps: [])
