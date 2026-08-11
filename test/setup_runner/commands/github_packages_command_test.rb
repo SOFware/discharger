@@ -3,6 +3,7 @@ require "setup_runner_test_helper"
 require "discharger/setup_runner/configuration"
 require "discharger/setup_runner/commands/github_packages_command"
 require "logger"
+require "open3"
 require "socket"
 
 class GithubPackagesCommandTest < ActiveSupport::TestCase
@@ -113,6 +114,25 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     refute_match(/gho_secret/, io.string)
   end
 
+  test "store_bundler_credentials writes the credentials to the local bundler config" do
+    calls = stub_capture3(success: true) do
+      @command.send(:store_bundler_credentials, "octocat", "gho_secret")
+    end
+
+    assert_equal [["bundle", "config", "set", "--local", SOURCE, "octocat:gho_secret"]], calls
+  end
+
+  test "store_bundler_credentials raises without leaking the token when bundle config fails" do
+    error = assert_raises(RuntimeError) do
+      stub_capture3(success: false, stderr: "could not write config") do
+        @command.send(:store_bundler_credentials, "octocat", "gho_secret")
+      end
+    end
+
+    assert_match(/could not write config/, error.message)
+    refute_match(/gho_secret/, error.message)
+  end
+
   test "execute warns when the source responds 401 to the credential probe" do
     io = StringIO.new
     with_stub_registry("401 Unauthorized") do |source|
@@ -153,7 +173,32 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       Discharger::SetupRunner::CommandRegistry.get("github_packages")
   end
 
+  test "github_packages runs before bundler when no steps are configured" do
+    require "discharger/setup_runner/command_registry"
+    names = Discharger::SetupRunner::CommandRegistry.ordered_names
+
+    assert_operator names.index("github_packages"), :<, names.index("bundler"),
+      "credentials must be stored before bundler installs from the private source"
+  end
+
   private
+
+  # Captures the argv Open3.capture3 is called with so the credential write
+  # can be asserted without shelling out to a real bundler.
+  def stub_capture3(success:, stderr: "")
+    calls = []
+    original = Open3.method(:capture3)
+    status = Object.new
+    status.define_singleton_method(:success?) { success }
+    Open3.define_singleton_method(:capture3) do |*args|
+      calls << args
+      ["", stderr, status]
+    end
+    yield
+    calls
+  ensure
+    Open3.define_singleton_method(:capture3, original)
+  end
 
   # A command with real credential probing against the given source;
   # everything before the probe is stubbed to succeed.

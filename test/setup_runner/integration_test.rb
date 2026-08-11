@@ -33,6 +33,57 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     assert_file_exists("test_output.txt")
   end
 
+  test "warns when github_packages is configured but missing from steps" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
+      steps:
+        - env
+    YAML
+
+    io = StringIO.new
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", Logger.new(io))
+    end
+
+    assert_match(/github_packages is configured but missing from steps/, io.string)
+    assert_match(%r{https://rubygems\.pkg\.github\.com/example}, io.string)
+  end
+
+  test "stays quiet when github_packages is configured and scheduled" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
+      steps:
+        - github_packages
+        - env
+    YAML
+
+    io = StringIO.new
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", Logger.new(io))
+    end
+
+    refute_match(/missing from steps/, io.string)
+  end
+
+  test "stays quiet when github_packages is not configured at all" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      steps:
+        - env
+    YAML
+
+    io = StringIO.new
+    capture_output do
+      Discharger::SetupRunner.run("setup.yml", Logger.new(io))
+    end
+
+    refute_match(/missing from steps/, io.string)
+  end
+
   test "allows programmatic configuration" do
     Discharger::SetupRunner.configure do |config|
       config.app_name = "ProgrammaticApp"
