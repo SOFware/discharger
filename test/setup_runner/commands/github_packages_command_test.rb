@@ -8,6 +8,7 @@ require "socket"
 
 class GithubPackagesCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
+  include Capture3Stubbing
 
   SOURCE = "https://rubygems.pkg.github.com/example"
 
@@ -203,23 +204,6 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
   end
 
   private
-
-  # Captures the argv Open3.capture3 is called with so the credential write
-  # can be asserted without shelling out to a real bundler.
-  def stub_capture3(success:, stderr: "")
-    calls = []
-    original = Open3.method(:capture3)
-    status = Object.new
-    status.define_singleton_method(:success?) { success }
-    Open3.define_singleton_method(:capture3) do |*args|
-      calls << args
-      ["", stderr, status]
-    end
-    yield
-    calls
-  ensure
-    Open3.define_singleton_method(:capture3, original)
-  end
 
   # A command with real credential probing against the given source;
   # everything before the probe is stubbed to succeed.

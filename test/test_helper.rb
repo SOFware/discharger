@@ -19,3 +19,24 @@ require "discharger"
 require "discharger/task"
 
 require "debug"
+require "open3"
+
+# Swaps Open3.capture3 for the duration of a block, restoring the original
+# even when the block raises. Returns the argv arrays capture3 was called
+# with, so callers can assert on the executed command.
+module Capture3Stubbing
+  def stub_capture3(stdout: "", stderr: "", success: true)
+    calls = []
+    original = Open3.method(:capture3)
+    status = Object.new
+    status.define_singleton_method(:success?) { success }
+    Open3.define_singleton_method(:capture3) do |*args|
+      calls << args
+      [stdout, stderr, status]
+    end
+    yield
+    calls
+  ensure
+    Open3.define_singleton_method(:capture3, original)
+  end
+end
