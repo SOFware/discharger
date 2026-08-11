@@ -82,6 +82,38 @@ class CommandFactoryTest < ActiveSupport::TestCase
     assert_equal Discharger::SetupRunner::Commands::BundlerCommand, commands.first.class
   end
 
+  test "does not warn about duplicate names when no steps are configured" do
+    config = config_with(steps: [], custom_steps: [
+      {"name" => "seed", "description" => "First", "command" => "true"},
+      {"name" => "seed", "description" => "Second", "command" => "true"}
+    ])
+    io = StringIO.new
+
+    factory(config, io).create_all_commands
+
+    refute_match(/duplicate custom step name/, io.string,
+      "nothing resolves by name without steps, so the warning is noise")
+  end
+
+  test "does not mislabel a failing registered command as unknown" do
+    require "discharger/setup_runner"
+    broken = Class.new(Discharger::SetupRunner::Commands::BaseCommand) do
+      def initialize(*)
+        raise "boom"
+      end
+    end
+    Discharger::SetupRunner.register_command("broken", broken)
+    config = config_with(steps: %w[broken])
+    io = StringIO.new
+
+    factory(config, io).create_all_commands
+
+    assert_match(/Failed to create command broken/, io.string)
+    refute_match(/unknown step/, io.string)
+  ensure
+    Discharger::SetupRunner.unregister_command("broken")
+  end
+
   test "empty steps still runs every built-in then custom steps last" do
     config = config_with(steps: [], custom_steps: [
       {"name" => "seed", "description" => "Seed data", "command" => "true"}

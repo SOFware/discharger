@@ -25,7 +25,6 @@ module Discharger
 
       def create_all_commands
         commands = []
-        named_custom = named_custom_steps
         scheduled = []
 
         # Create built-in and named custom commands from steps
@@ -33,13 +32,15 @@ module Discharger
           # Only reachable here: the else branch schedules every registered
           # command, so github_packages can never be missing from it.
           warn_unscheduled_github_packages
+          named_custom = named_custom_steps
           config.steps.each do |step|
             name = step.to_s
-            if (command = create_command(name))
+            if CommandRegistry.get(name)
               if named_custom.key?(name)
                 logger&.warn "custom step name #{name.inspect} is shadowed by a built-in command; the built-in will run"
               end
-              commands << command
+              command = create_command(name)
+              commands << command if command
             elsif (step_config = named_custom[name])
               scheduled << step_config
               commands << build_custom_command(step_config)
