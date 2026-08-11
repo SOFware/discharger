@@ -177,6 +177,8 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     require "discharger/setup_runner/command_registry"
     names = Discharger::SetupRunner::CommandRegistry.ordered_names
 
+    assert_includes names, "github_packages"
+    assert_includes names, "bundler"
     assert_operator names.index("github_packages"), :<, names.index("bundler"),
       "credentials must be stored before bundler installs from the private source"
   end
