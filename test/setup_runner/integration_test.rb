@@ -51,6 +51,23 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     assert_match(%r{https://rubygems\.pkg\.github\.com/example}, io.string)
   end
 
+  test "warns about unscheduled github_packages without an explicit logger" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      github_packages:
+        source: "https://rubygems.pkg.github.com/example"
+      steps:
+        - env
+    YAML
+
+    out, _ = capture_output do
+      Discharger::SetupRunner.run("setup.yml")
+    end
+
+    assert_match(/github_packages is configured but missing from steps/, out,
+      "the warning must reach the default stdout logger, as bin/setup passes none")
+  end
+
   test "stays quiet when github_packages is configured and scheduled" do
     create_file("setup.yml", <<~YAML)
       app_name: TestApp

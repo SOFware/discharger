@@ -15,7 +15,7 @@ module Discharger
         @config = config
         @app_root = app_root || Dir.pwd
         @logger = logger || Logger.new($stdout)
-        @command_factory = CommandFactory.new(config, app_root, logger)
+        @command_factory = CommandFactory.new(config, @app_root, @logger)
       end
 
       def run
