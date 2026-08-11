@@ -131,6 +131,16 @@ class CommandRegistryTest < ActiveSupport::TestCase
       "registering it by name only produces construction failures"
   end
 
+  test "DEFAULT_ORDER stays in sync with the auto-registered built-ins" do
+    registry = Discharger::SetupRunner::CommandRegistry
+
+    registry.load_commands
+
+    assert_equal registry::DEFAULT_ORDER.sort, registry.names.sort,
+      "a built-in command missing from DEFAULT_ORDER would silently run " \
+      "after database, intermixed with custom commands"
+  end
+
   test "ordered_names appends commands with no default position" do
     registry = Discharger::SetupRunner::CommandRegistry
 
