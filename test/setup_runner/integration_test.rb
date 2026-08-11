@@ -101,6 +101,31 @@ class SetupRunnerIntegrationTest < ActiveSupport::TestCase
     refute_match(/missing from steps/, io.string)
   end
 
+  test "runs a named custom step at its scheduled position" do
+    create_file("setup.yml", <<~YAML)
+      app_name: TestApp
+      steps:
+        - prepare
+        - env
+      custom_steps:
+        - name: prepare
+          description: "Prepare marker"
+          command: "touch marker.txt"
+    YAML
+    create_file(".env.example", "TEST_VAR=example")
+
+    out = nil
+    with_output_enabled do
+      out, _ = capture_output do
+        Discharger::SetupRunner.run("setup.yml", Logger.new(StringIO.new))
+      end
+    end
+
+    assert_file_exists("marker.txt")
+    assert_operator out.index("Prepare marker"), :<, out.index("Setup environment file"),
+      "the named custom step must run at its scheduled position, not last"
+  end
+
   test "allows programmatic configuration" do
     Discharger::SetupRunner.configure do |config|
       config.app_name = "ProgrammaticApp"

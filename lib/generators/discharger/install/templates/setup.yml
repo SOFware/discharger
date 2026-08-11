@@ -62,6 +62,11 @@ steps:
 #   - pg_tools
 
 # Custom commands for application-specific setup (run AFTER Rails loads)
+# Steps run last by default. Give a step a name and list it in steps: above
+# to run it earlier, e.g.:
+#   - name: import_certs
+#     description: "Import development certificates"
+#     command: "bin/import-certs"
 custom_steps:
   - description: "Seed application data"
     command: "bin/rails db:seed"

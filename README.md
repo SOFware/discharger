@@ -322,6 +322,26 @@ Each custom step can include:
 - `description` - A description shown during setup
 - `command` - The command to execute
 - `condition` - An optional Ruby expression that must evaluate to true for the command to run
+- `name` - An optional name that lets the step be scheduled in the `steps` list
+
+Custom steps run after the built-in steps, in the order listed. To run one
+earlier, give it a `name` and list that name in `steps`:
+
+```yaml
+custom_steps:
+  - name: import_certs
+    description: "Import development certificates"
+    command: "bin/import-certs"
+
+steps:
+  - brew
+  - import_certs  # runs between brew and bundler
+  - bundler
+```
+
+A named step listed in `steps` runs only at that position; named steps that
+are not listed keep the default run-last behavior. A name that collides with
+a built-in step resolves to the built-in, and a warning is logged.
 
 ### Creating Custom Command Classes
 

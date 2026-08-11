@@ -25,15 +25,27 @@ module Discharger
 
       def create_all_commands
         commands = []
+        named_custom = named_custom_steps
+        scheduled = []
 
-        # Create built-in commands from steps
+        # Create built-in and named custom commands from steps
         if config.steps.any?
           # Only reachable here: the else branch schedules every registered
           # command, so github_packages can never be missing from it.
           warn_unscheduled_github_packages
           config.steps.each do |step|
-            command = create_command(step)
-            commands << command if command
+            name = step.to_s
+            if (command = create_command(name))
+              if named_custom.key?(name)
+                logger&.warn "custom step name #{name.inspect} is shadowed by a built-in command; the built-in will run"
+              end
+              commands << command
+            elsif (step_config = named_custom[name])
+              scheduled << step_config
+              commands << build_custom_command(step_config)
+            else
+              logger&.warn "unknown step #{name.inspect}; not a built-in or named custom step"
+            end
           end
         else
           # If no steps specified, create all registered commands
@@ -43,12 +55,11 @@ module Discharger
           end
         end
 
-        # Create custom commands
+        # Create the remaining custom commands
         if config.respond_to?(:custom_steps) && config.custom_steps.any?
-          require_relative "commands/custom_command"
           config.custom_steps.each do |step_config|
-            command = Commands::CustomCommand.new(config, app_root, logger, step_config)
-            commands << command
+            next if scheduled.any? { |s| s.equal?(step_config) }
+            commands << build_custom_command(step_config)
           end
         end
 
@@ -56,6 +67,29 @@ module Discharger
       end
 
       private
+
+      # Custom steps with a "name" key can be scheduled by that name in
+      # steps:. First entry wins a contested name; later duplicates keep the
+      # default run-last behavior.
+      def named_custom_steps
+        return {} unless config.respond_to?(:custom_steps)
+
+        config.custom_steps.each_with_object({}) do |step_config, named|
+          name = step_config["name"].to_s
+          next if name.empty?
+
+          if named.key?(name)
+            logger&.warn "duplicate custom step name #{name.inspect}; only the first entry can be scheduled"
+            next
+          end
+          named[name] = step_config
+        end
+      end
+
+      def build_custom_command(step_config)
+        require_relative "commands/custom_command"
+        Commands::CustomCommand.new(config, app_root, logger, step_config)
+      end
 
       # A github_packages block with no matching step is inert, and the only
       # symptom is bundler failing against the private source. Say so instead.
