@@ -187,6 +187,32 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
   end
 
+  test "unscheduled_warning ignores source references in steps whose condition is false" do
+    @config.custom_steps = [{
+      "description" => "creds",
+      "command" => "bundle config set --local #{SOURCE} user:token",
+      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
+    }]
+
+    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+
+    refute_nil message, "a step skipped by its condition stores nothing this run"
+    assert_match(/missing from steps/, message)
+  end
+
+  test "unscheduled_warning stays quiet when the referencing step's condition is true" do
+    ENV["DISCHARGER_TEST_CREDS"] = "true"
+    @config.custom_steps = [{
+      "description" => "creds",
+      "command" => "bundle config set --local #{SOURCE} user:token",
+      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
+    }]
+
+    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+  ensure
+    ENV.delete("DISCHARGER_TEST_CREDS")
+  end
+
   test "command is registered as github_packages" do
     require "discharger/setup_runner/command_registry"
     assert_equal Discharger::SetupRunner::Commands::GithubPackagesCommand,

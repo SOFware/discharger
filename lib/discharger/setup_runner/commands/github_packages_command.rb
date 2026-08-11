@@ -22,13 +22,24 @@ module Discharger
           source = config.github_packages&.source
           return if source.to_s.empty?
           if config.respond_to?(:custom_steps) &&
-              config.custom_steps.any? { |step| step["command"].to_s.include?(source) }
+              config.custom_steps.any? { |step| step_handles_source?(step, source) }
             return
           end
 
           "github_packages is configured but missing from steps; " \
             "credentials will not be stored and bundler may fail for #{source}"
         end
+
+        # A referencing step only counts as handling credentials when it will
+        # actually run: CustomCommand skips itself when its condition is
+        # false, storing nothing on this run.
+        def self.step_handles_source?(step, source)
+          return false unless step["command"].to_s.include?(source)
+
+          require_relative "../condition_evaluator"
+          ConditionEvaluator.evaluate(step["condition"])
+        end
+        private_class_method :step_handles_source?
 
         def execute
           unless gh_installed?
