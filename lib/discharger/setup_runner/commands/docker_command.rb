@@ -104,12 +104,14 @@ module Discharger
           log "Checking #{name} container"
 
           if system_quiet("docker ps | grep #{name} > /dev/null 2>&1")
+            ensure_restart_policy(name)
             log "#{name} container is already running"
             return
           end
 
           # Check if container exists but is stopped
           if system_quiet("docker inspect #{name} > /dev/null 2>&1")
+            ensure_restart_policy(name)
             log "Starting existing #{name} container"
             unless system_quiet("docker start #{name}")
               log "Removing failed #{name} container"
@@ -148,12 +150,16 @@ module Discharger
         def create_container(name:, port:, image:, internal_port:, env: {}, volume: nil)
           log "Creating new #{name} container"
 
-          cmd = ["docker", "run", "-d", "--name", name, "-p", "#{port}:#{internal_port}"]
+          cmd = ["docker", "run", "-d", "--restart", "unless-stopped", "--name", name, "-p", "#{port}:#{internal_port}"]
           env.each { |k, v| cmd.push("-e", "#{k}=#{v}") }
           cmd.push("-v", volume) if volume
           cmd.push(image)
 
           system!(*cmd)
+        end
+
+        def ensure_restart_policy(name)
+          system!("docker", "update", "--restart", "unless-stopped", name)
         end
 
         def docker_available?

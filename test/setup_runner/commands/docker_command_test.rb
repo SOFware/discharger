@@ -161,6 +161,7 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     docker_run = commands_run.find { |cmd| cmd.include?("docker run") }
     assert docker_run
+    assert_match(/--restart unless-stopped/, docker_run)
     assert_match(/--name db-test/, docker_run)
     assert_match(/-p 5433:5432/, docker_run)
     assert_match(/postgres:15/, docker_run)
@@ -200,6 +201,7 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     docker_run = commands_run.find { |cmd| cmd.include?("docker run") }
     assert docker_run
+    assert_match(/--restart unless-stopped/, docker_run)
     assert_match(/--name redis-test/, docker_run)
     assert_match(/-p 6380:6379/, docker_run)
     assert_match(/redis:7/, docker_run)
@@ -227,10 +229,15 @@ class DockerCommandTest < ActiveSupport::TestCase
       end
     end
 
+    @command.define_singleton_method(:system!) do |*args|
+      commands_run << args.join(" ")
+    end
+
     @command.define_singleton_method(:sleep) { |_| }
 
     @command.execute
 
+    assert_includes commands_run, "docker update --restart unless-stopped db-test"
     assert_includes commands_run, "docker start db-test"
   end
 
@@ -245,7 +252,7 @@ class DockerCommandTest < ActiveSupport::TestCase
     @command.define_singleton_method(:system_quiet) do |cmd|
       case cmd
       when /docker ps.*db-test/
-        commands_run.include?("docker run -d --name db-test -p 5432:5432 -e POSTGRES_PASSWORD=postgres -v db-test:/var/lib/postgresql/data postgres:14")
+        commands_run.any? { |command| command.start_with?("docker run") }
       when /docker inspect db-test/
         true
       when /docker start db-test/
@@ -267,14 +274,16 @@ class DockerCommandTest < ActiveSupport::TestCase
     @command.execute
 
     assert_includes commands_run, "docker rm -f db-test"
+    assert_includes commands_run, "docker update --restart unless-stopped db-test"
     assert commands_run.any? { |cmd| cmd.include?("docker run") }
   end
 
-  test "execute skips container if already running" do
+  test "execute updates the restart policy if the container is already running" do
     @config.database = OpenStruct.new(name: "db-test")
 
     commands_run = []
 
+    @command.define_singleton_method(:native_postgresql_available?) { false }
     @command.define_singleton_method(:docker_running?) { true }
 
     @command.define_singleton_method(:system_quiet) do |cmd|
@@ -287,7 +296,7 @@ class DockerCommandTest < ActiveSupport::TestCase
 
     @command.execute
 
-    assert_empty commands_run
+    assert_equal ["docker update --restart unless-stopped db-test"], commands_run
   end
 
   test "execute raises error if container fails to start" do
