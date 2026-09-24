@@ -156,6 +156,23 @@ module Discharger
       sha
     end
 
+    def merge_tag_into_production_branch(tag, output: $stdout)
+      git = ->(*args) do
+        stdout, stderr, status = Open3.capture3("git", *args)
+        return stdout.strip if status.success?
+
+        sysecho("Could not merge #{tag} into #{production_branch}: #{stderr.strip}".bg(:yellow).black, output:)
+        nil
+      end
+
+      return false unless git.call("fetch", "origin", production_branch)
+      return false unless (tree = git.call("merge-tree", "--write-tree", "origin/#{production_branch}", tag))
+      return false unless (commit = git.call("commit-tree", tree, "-p", "origin/#{production_branch}", "-p", "#{tag}^{commit}", "-m", "Merge tag '#{tag}'"))
+      return false unless git.call("push", "origin", "#{commit}:refs/heads/#{production_branch}")
+
+      sysecho("✓ Merged #{tag} into #{production_branch}".bg(:green).black, output:)
+    end
+
     def git_show_version(branch)
       content, _, status = Open3.capture3("git", "show", "origin/#{branch}:#{version_file}")
       return nil unless status.success?
@@ -302,7 +319,7 @@ module Discharger
         release_source = auto_deploy_staging ? working_branch : staging_branch
 
         release_action = if auto_deploy_staging
-          "This will tag the release commit on #{working_branch} and push the tag."
+          "This will tag the release commit on #{working_branch}, push the tag, and merge it into #{production_branch}."
         else
           "This will tag the current version and push it to the production branch."
         end
@@ -368,6 +385,7 @@ module Discharger
         end
 
         abort "Release failed." unless continue
+        merge_tag_into_production_branch("v#{current_version}") if auto_deploy_staging
 
         sysecho <<~MSG
           Version #{current_version} released to production.

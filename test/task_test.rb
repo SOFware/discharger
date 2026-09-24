@@ -224,6 +224,41 @@ class DischargerTaskTest < Minitest::Test
     end
   end
 
+  def test_merge_tag_into_production_branch_merges_over_diverged_history
+    Dir.mktmpdir do |dir|
+      git = ->(*args) { system("git", *args, exception: true, out: File::NULL, err: File::NULL) }
+      rev = ->(ref) { `git rev-parse #{ref}`.strip }
+      origin = File.join(dir, "origin.git")
+      git.call("init", "--bare", "-b", "develop", origin)
+      git.call("clone", "-q", origin, File.join(dir, "work"))
+
+      Dir.chdir(File.join(dir, "work")) do
+        git.call("config", "user.name", "Test")
+        git.call("config", "user.email", "test@example.com")
+        File.write("app.rb", "v1\n")
+        git.call("add", "app.rb")
+        git.call("commit", "-m", "v1")
+        git.call("push", "origin", "develop", "develop:main")
+        git.call("checkout", "-b", "main", "origin/main")
+        git.call("commit", "--allow-empty", "-m", "Merge tag 'v0'")
+        git.call("push", "origin", "main")
+        git.call("checkout", "develop")
+        File.write("app.rb", "v2\n")
+        git.call("commit", "-am", "v2")
+        git.call("tag", "-a", "v2", "-m", "Release 2")
+        git.call("push", "origin", "develop", "v2")
+        old_main = rev.call("origin/main")
+
+        assert @task.merge_tag_into_production_branch("v2", output: StringIO.new)
+
+        git.call("fetch", "origin")
+        assert_equal rev.call("v2^{tree}"), rev.call("origin/main^{tree}")
+        assert_equal [old_main, rev.call("v2^{commit}")], `git rev-list --parents -n 1 origin/main`.split.drop(1)
+        assert_equal "develop", `git rev-parse --abbrev-ref HEAD`.strip
+      end
+    end
+  end
+
   def test_find_release_commit_aborts_when_no_commit_touches_changelog
     @task.changelog_file = "CHANGELOG.md"
     @task.version_constant = "DischargerTaskTest::TEST_VERSION"
@@ -295,6 +330,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:find_release_commit!) { |*_args, **_kwargs| FAKE_RELEASE_SHA }
     task.define_singleton_method(:pr_already_merged?) { |_ref| false }
+    task.define_singleton_method(:merge_tag_into_production_branch) { |tag, **_kwargs| commands << ["merge_tag_into_production_branch", tag] }
 
     task
   end
@@ -323,6 +359,29 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should push the tag"
     assert command_issued?(/git fetch origin stage:stage main:main/),
       "Should fetch staging and production branches"
+  end
+
+  def test_auto_deploy_mode_merges_tag_into_production_branch_after_pushing_it
+    task = build_task(:rel_merge_seq, auto_deploy: true)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_merge_seq"].invoke }
+
+    push_idx = @commands.index(["git push origin v1.2.3"])
+    merge_idx = @commands.index(["merge_tag_into_production_branch", "v1.2.3"])
+    assert merge_idx, "Expected the tag to be merged into the production branch"
+    assert_operator push_idx, :<, merge_idx, "Tag must be pushed before merging it"
+  end
+
+  def test_standard_mode_does_not_merge_tag_into_production_branch
+    task = build_task(:rel_nomerge_seq, auto_deploy: false)
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_nomerge_seq"].invoke }
+
+    refute command_issued?(/merge_tag_into_production_branch/)
   end
 
   def test_auto_deploy_mode_tags_release_commit_directly
@@ -613,6 +672,24 @@ class DischargerExistingPrNumberTest < Minitest::Test
     stub_capture3(stderr: "error", success: false) do
       assert_nil @task.existing_pr_number("main", "develop")
     end
+  end
+end
+
+class DischargerMergeTagTest < Minitest::Test
+  include Capture3Stubbing
+
+  def setup
+    @task = Discharger::Task.new
+  end
+
+  def test_warns_and_stops_when_a_git_step_fails
+    output = StringIO.new
+    calls = stub_capture3(stderr: "protected branch hook declined", success: false) do
+      refute @task.merge_tag_into_production_branch("v1.2.3", output:)
+    end
+
+    assert_equal 1, calls.length
+    assert_match(/Could not merge v1\.2\.3 into main: protected branch hook declined/, output.string)
   end
 end
 
