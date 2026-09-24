@@ -187,6 +187,16 @@ end
 
 This allows you to use environment variables to override the default branch names, or set project-specific defaults. The `DISCHARGER_BUILD_BRANCH` environment variable (shown above) provides a runtime override specifically for the build task.
 
+### Auto-deploy Staging
+
+For projects whose CI deploys the working branch to staging on every merge, set `task.auto_deploy_staging = true` and skip `rake release:stage`. Once the finalize PR merges, `rake release`:
+
+1. Tags the newest commit that changed the current version's dated changelog section, so work merged after finalizing (or re-finalizing for a hotfix) is left out.
+2. Pushes the tag. Production deploys from `v*` tags.
+3. Merges the tag into `production_branch` so it tracks production. If that push is rejected, the release still completes with a warning.
+
+Production ships the tagged commit, which can be older than what staging last ran.
+
 ## Development Setup Automation
 
 Discharger includes a setup script that automates your development environment configuration. When you run the install generator, it creates a `bin/setup` script and a `config/setup.yml` configuration file.
