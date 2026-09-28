@@ -74,8 +74,8 @@ class SetupTest < ActiveSupport::TestCase
   test "print_footer outputs success message" do
     setup = Discharger::Setup.new("config/setup.yml")
 
-    output, _ = capture_io { setup.send(:print_footer) }
-    assert_match(/Setup completed successfully/, output)
+    output, _ = capture_io { setup.send(:print_footer, 1.5) }
+    assert_match(/Setup completed successfully! \(1\.50s\)/, output)
   end
 
   test "validate_environment checks for Gemfile" do

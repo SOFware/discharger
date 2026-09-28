@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "pathname"
+require_relative "timing"
 
 # Unified entry point for Discharger setup.
 # Handles both pre-Rails prerequisites and post-Rails setup commands.
@@ -34,21 +35,23 @@ module Discharger
         validate_environment
         print_header
 
-        # Phase 1: Load bundler first (activates correct gem versions)
-        # This must happen before we parse YAML to avoid psych version conflicts
-        load_bundler
+        elapsed = Timing.measure do
+          # Phase 1: Load bundler first (activates correct gem versions)
+          # This must happen before we parse YAML to avoid psych version conflicts
+          load_bundler
 
-        # Phase 2: Pre-Rails setup (env vars, system dependencies)
-        # These run AFTER bundler but BEFORE Rails loads
-        run_prerequisites
+          # Phase 2: Pre-Rails setup (env vars, system dependencies)
+          # These run AFTER bundler but BEFORE Rails loads
+          run_prerequisites
 
-        # Phase 3: Load Rails (uses env vars from phase 2)
-        load_rails
+          # Phase 3: Load Rails (uses env vars from phase 2)
+          load_rails
 
-        # Phase 4: Run Discharger commands (after Rails loads)
-        run_setup_commands
+          # Phase 4: Run Discharger commands (after Rails loads)
+          run_setup_commands
+        end
 
-        print_footer
+        print_footer(elapsed)
       end
     end
 
@@ -71,8 +74,8 @@ module Discharger
       puts "Configuration loaded from: #{config_path}"
     end
 
-    def print_footer
-      puts "\n== Setup completed successfully! =="
+    def print_footer(elapsed)
+      puts format("\n== Setup completed successfully! (%.2fs) ==", elapsed)
     end
 
     def load_bundler
@@ -89,8 +92,11 @@ module Discharger
       # Load Rails from the standard location
       rails_config = File.join(app_root, "config", "application.rb")
       if File.exist?(rails_config)
-        require rails_config
-        Rails.application.initialize!
+        elapsed = Timing.measure do
+          require rails_config
+          Rails.application.initialize!
+        end
+        puts format("\n== Rails loaded (%.2fs) ==", elapsed)
       else
         puts "Warning: config/application.rb not found. Skipping Rails initialization."
       end

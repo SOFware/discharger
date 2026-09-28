@@ -222,6 +222,9 @@ the token lacks the `read:packages` scope. Rails still has to boot before the st
 run, so an app whose boot needs `.env` or `config/database.yml` copies them in
 `pre_steps` (see below).
 
+Each step prints its elapsed time when it finishes, and the closing line reports the
+total, so a slow setup shows which step to look at.
+
 ### Configuration
 
 The setup process is configured through `config/setup.yml`. Here's an example configuration:
