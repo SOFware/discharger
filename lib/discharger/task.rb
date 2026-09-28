@@ -459,6 +459,12 @@ module Discharger
 
         desc "Send a message to Slack."
         task :slack, [:text, :channel, :emoji, :ts] => :environment do |_, args|
+          instance_variable_set(:@last_message_ts, nil)
+          if chat_token.blank?
+            sysecho "Skipping Slack message (chat_token is not set):".bg(:yellow).black + " #{args[:text]}"
+            next
+          end
+
           args.with_defaults(
             channel: release_message_channel,
             emoji: nil
@@ -469,7 +475,12 @@ module Discharger
           options[:thread_ts] = options.delete(:ts) if options[:ts]
 
           sysecho "Sending message to Slack:".bg(:green).black + " #{args[:text]}"
-          result = client.chat_postMessage(**options)
+          begin
+            result = client.chat_postMessage(**options)
+          rescue Faraday::Error => e
+            sysecho "Could not send Slack message: #{e.message}".bg(:yellow).black
+            next
+          end
           instance_variable_set(:@last_message_ts, result["ts"])
           sysecho %(Message sent: #{result["ts"]})
         end

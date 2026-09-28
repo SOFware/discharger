@@ -985,3 +985,81 @@ class DischargerStageAnnouncementTest < Minitest::Test
       "Projects without a runbook should only get the build announcement"
   end
 end
+
+class DischargerSlackTaskTest < Minitest::Test
+  # A fake Slack::Web::Client whose chat_postMessage records its options and
+  # either returns the response or raises the error it was built with.
+  FakeClient = Struct.new(:response, :error, :calls) do
+    def chat_postMessage(**options)
+      calls << options
+      raise error if error
+      response
+    end
+  end
+
+  def setup
+    Rake::Task.define_task(:environment) {} unless Rake::Task.task_defined?(:environment)
+    @task = Discharger::Task.new(:"slack_#{name}")
+    @task.release_message_channel = "#releases"
+    @task.chat_token = "fake_token"
+    @task.instance_variable_set(:@last_message_ts, "STALE")
+  end
+
+  def slack_task
+    @task.define
+    Rake::Task["#{@task.name}:slack"]
+  end
+
+  # Swaps Slack::Web::Client.new for the duration of the block. Takes a client
+  # to hand back, or a block-less lambda to run in its place.
+  def stub_slack_client(client)
+    original = Slack::Web::Client.method(:new)
+    Slack::Web::Client.define_singleton_method(:new) do |*_args, **_opts|
+      client.respond_to?(:call) ? client.call : client
+    end
+    yield
+  ensure
+    Slack::Web::Client.define_singleton_method(:new, original)
+  end
+
+  def test_skips_posting_when_chat_token_is_blank
+    @task.chat_token = nil
+    task = slack_task
+
+    stub_slack_client(-> { flunk "Built a Slack client without a token" }) do
+      assert_output(/Skipping Slack message \(chat_token is not set\):.*Released 1\.2\.3/) do
+        task.invoke("Released 1.2.3")
+      end
+    end
+    assert_nil @task.last_message_ts
+  end
+
+  def test_continues_when_slack_rejects_the_message
+    task = slack_task
+    client = FakeClient.new(nil, Slack::Web::Api::Errors::InvalidAuth.new("invalid_auth"), [])
+
+    stub_slack_client(client) do
+      assert_output(/Could not send Slack message: invalid_auth/) do
+        task.invoke("Released 1.2.3")
+      end
+    end
+    assert_nil @task.last_message_ts
+  end
+
+  def test_posts_the_message_and_records_its_timestamp
+    task = slack_task
+    client = FakeClient.new({"ts" => "123.456"}, nil, [])
+
+    stub_slack_client(client) do
+      assert_output(/Message sent: 123\.456/) do
+        task.invoke("Released 1.2.3", nil, ":chipmunk:", "111.222")
+      end
+    end
+
+    assert_equal "123.456", @task.last_message_ts
+    assert_equal(
+      [{text: "Released 1.2.3", channel: "#releases", icon_emoji: ":chipmunk:", thread_ts: "111.222"}],
+      client.calls
+    )
+  end
+end
