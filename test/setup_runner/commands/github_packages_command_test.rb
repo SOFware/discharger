@@ -84,18 +84,20 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     assert_empty stored
   end
 
-  test "execute warns about missing read:packages scope when the source rejects credentials" do
+  test "execute leaves bundler credentials alone and warns about read:packages when the source rejects the token" do
     io = StringIO.new
     logger = Logger.new(io)
     command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, logger)
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
       command: command)
-    command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
+    stored = []
+    command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
     command.define_singleton_method(:credentials_valid?) { |_user, _token| false }
 
     command.execute
 
+    assert_empty stored
     assert_match(/read:packages/, io.string)
     assert_match(/gh auth refresh/, io.string)
   end
