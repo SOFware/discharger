@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "fileutils"
-require "pathname"
 require_relative "timing"
 
 # Unified entry point for Discharger setup.
