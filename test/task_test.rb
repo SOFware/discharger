@@ -1027,9 +1027,10 @@ class DischargerSlackTaskTest < Minitest::Test
     task = slack_task
 
     stub_slack_client(-> { flunk "Built a Slack client without a token" }) do
-      assert_output(/Skipping Slack message \(chat_token is not set\):.*Released 1\.2\.3/) do
-        task.invoke("Released 1.2.3")
-      end
+      output, _ = capture_io { task.invoke("Released 1.2.3") }
+      assert_match(/Slack message not sent: chat_token is not set\./, output)
+      assert_match(/Slack release token from Bitwarden/, output)
+      assert_match(/Post this to #releases yourself:\n\nReleased 1\.2\.3\n/, output)
     end
     assert_nil @task.last_message_ts
   end
@@ -1039,9 +1040,9 @@ class DischargerSlackTaskTest < Minitest::Test
     client = FakeClient.new(nil, Slack::Web::Api::Errors::InvalidAuth.new("invalid_auth"), [])
 
     stub_slack_client(client) do
-      assert_output(/Could not send Slack message: invalid_auth/) do
-        task.invoke("Released 1.2.3")
-      end
+      output, _ = capture_io { task.invoke("Released 1.2.3") }
+      assert_match(/Slack message not sent: invalid_auth\./, output)
+      assert_match(/Post this to #releases yourself:\n\nReleased 1\.2\.3\n/, output)
     end
     assert_nil @task.last_message_ts
   end

@@ -266,6 +266,10 @@ module Discharger
       message
     end
 
+    def echo_unsent_slack_message(text, channel)
+      sysecho "Post this to #{channel} yourself:\n\n#{text}\n"
+    end
+
     def existing_pr_number(base, head)
       stdout, _, status = Open3.capture3(
         "gh", "pr", "list",
@@ -460,15 +464,19 @@ module Discharger
         desc "Send a message to Slack."
         task :slack, [:text, :channel, :emoji, :ts] => :environment do |_, args|
           instance_variable_set(:@last_message_ts, nil)
-          if chat_token.blank?
-            sysecho "Skipping Slack message (chat_token is not set):".bg(:yellow).black + " #{args[:text]}"
-            next
-          end
-
           args.with_defaults(
             channel: release_message_channel,
             emoji: nil
           )
+          if chat_token.blank?
+            sysecho <<~MSG.bg(:yellow).black
+              Slack message not sent: chat_token is not set.
+              Set it with the Slack release token from Bitwarden before the next release.
+            MSG
+            echo_unsent_slack_message(args[:text], args[:channel])
+            next
+          end
+
           client = Slack::Web::Client.new
           options = args.to_h
           options[:icon_emoji] = options.delete(:emoji) if options[:emoji]
@@ -478,7 +486,8 @@ module Discharger
           begin
             result = client.chat_postMessage(**options)
           rescue Faraday::Error => e
-            sysecho "Could not send Slack message: #{e.message}".bg(:yellow).black
+            sysecho "Slack message not sent: #{e.message}.".bg(:yellow).black
+            echo_unsent_slack_message(args[:text], args[:channel])
             next
           end
           instance_variable_set(:@last_message_ts, result["ts"])
