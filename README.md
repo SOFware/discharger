@@ -211,6 +211,17 @@ $ bin/setup
 
 This script is idempotent - you can run it multiple times safely, and it will ensure your environment is properly configured.
 
+It works on a fresh clone with no gems installed. The generated script first runs a
+standard-library-only pass that stores bundler credentials for a configured
+`github_packages` source (from your GitHub CLI login, when its token has the
+`read:packages` scope), installs the bundle, and then
+re-execs itself under `bundle exec` so default gems such as psych never clash with
+`Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
+pass; the `github_packages` step later verifies the stored credentials and warns when
+the token lacks the `read:packages` scope. Rails still has to boot before the steps
+run, so an app whose boot needs `.env` or `config/database.yml` copies them in
+`pre_steps` (see below).
+
 ### Configuration
 
 The setup process is configured through `config/setup.yml`. Here's an example configuration:

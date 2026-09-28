@@ -1,6 +1,7 @@
 require "test_helper"
 require "generators/discharger/install/install_generator"
 require "rails/generators/test_case"
+require "open3"
 
 class InstallGeneratorTest < Rails::Generators::TestCase
   tests Discharger::Generators::InstallGenerator
@@ -25,6 +26,63 @@ class InstallGeneratorTest < Rails::Generators::TestCase
 
     # Check file is executable
     assert File.executable?(File.join(destination_root, "bin/setup"))
+  end
+
+  test "generated setup stores GitHub Packages credentials before installing a missing bundle" do
+    log = run_generated_setup(bundle_check_status: 1)
+
+    config_set = log.index("bundle config set --local https://rubygems.pkg.github.com/example octocat:gh-test-token")
+    install = log.index("bundle install")
+    assert config_set, "expected credentials to be stored, got:\n#{log.join("\n")}"
+    assert install, "expected bundle install, got:\n#{log.join("\n")}"
+    assert_operator config_set, :<, install, "credentials must be stored before bundle install"
+    assert_match(%r{\Abundle exec .*/bin/setup\z}, reexec_line(log), "setup must re-exec under bundle exec")
+  end
+
+  test "generated setup skips installing when the bundle is satisfied" do
+    log = run_generated_setup(bundle_check_status: 0)
+
+    refute_includes log, "bundle install"
+    assert_empty log.grep(/\Agh /)
+    assert reexec_line(log), "setup must re-exec under bundle exec"
+  end
+
+  test "generated setup still installs when gh is not authenticated" do
+    log = run_generated_setup(bundle_check_status: 1, gh_auth_status: 1)
+
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
+  end
+
+  test "generated setup leaves bundler credentials alone when the gh token lacks read:packages" do
+    log, stderr, status = run_generated_setup_raw(bundle_check_status: 1, gh_scopes: "'repo', 'workflow'")
+
+    assert status.success?, stderr
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
+    assert_match(/gh auth refresh -s read:packages/, stderr)
+  end
+
+  test "generated setup re-execs from the app root when invoked elsewhere" do
+    log = run_generated_setup(bundle_check_status: 0, from: Dir.tmpdir)
+
+    assert_includes log, "cwd #{destination_root}"
+    assert_match(/\Abundle exec .* #{Regexp.escape(File.join(destination_root, "bin/setup"))}\z/, reexec_line(log))
+  end
+
+  test "generated setup leaves a missing setup.yml for the bundled pass to report" do
+    log = run_generated_setup(bundle_check_status: 1, setup_yml: false)
+
+    assert_empty log.grep(/\Agh /)
+    assert_includes log, "bundle install"
+  end
+
+  test "generated setup aborts with a credentials hint when bundle install fails" do
+    _log, stderr, status = run_generated_setup_raw(bundle_check_status: 1, bundle_install_status: 1)
+
+    refute status.success?
+    assert_match(/bundle install failed/, stderr)
+    assert_match(/gh auth login/, stderr)
   end
 
   test "creates setup script with custom path" do
@@ -55,5 +113,64 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_file "config/initializers/discharger.rb"
     assert_file "bin/setup"
     assert_file "config/setup.yml"
+  end
+
+  private
+
+  # Returns the commands the stub bundle/gh saw, in order; the stub
+  # `bundle exec` exits instead of re-running the script.
+  def run_generated_setup(**options)
+    log, stderr, status = run_generated_setup_raw(**options)
+    assert status.success?, "bin/setup failed: #{stderr}\n#{log.join("\n")}"
+    log
+  end
+
+  def run_generated_setup_raw(bundle_check_status:, bundle_install_status: 0, gh_auth_status: 0, gh_scopes: "'repo', 'read:packages'", from: destination_root, setup_yml: true)
+    run_generator
+    File.write(File.join(destination_root, "Gemfile"), "source 'https://rubygems.org'\n")
+    if setup_yml
+      File.write(File.join(destination_root, "config/setup.yml"), <<~YAML)
+        app_name: TestApp
+        github_packages:
+          source: "https://rubygems.pkg.github.com/example"
+      YAML
+    else
+      FileUtils.rm_f(File.join(destination_root, "config/setup.yml"))
+    end
+
+    stubs = File.join(destination_root, "stubs")
+    log_path = File.join(destination_root, "stub.log")
+    write_stub(stubs, "bundle", <<~SH)
+      case "$1" in
+        check) exit #{bundle_check_status} ;;
+        install) exit #{bundle_install_status} ;;
+        exec) echo "cwd $PWD" >> "$STUB_LOG"; exit 0 ;;
+        *) exit 0 ;;
+      esac
+    SH
+    write_stub(stubs, "gh", <<~SH)
+      case "$*" in
+        "auth status") [ #{gh_auth_status} -eq 0 ] && echo "Token scopes: #{gh_scopes}"; exit #{gh_auth_status} ;;
+        "api user --jq .login") [ #{gh_auth_status} -eq 0 ] && echo octocat; exit #{gh_auth_status} ;;
+        "auth token") echo gh-test-token ;;
+      esac
+      exit 0
+    SH
+
+    env = {"PATH" => "#{stubs}:#{ENV["PATH"]}", "STUB_LOG" => log_path}
+    _stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, File.join(destination_root, "bin/setup"), chdir: from)
+    log = File.exist?(log_path) ? File.readlines(log_path, chomp: true) : []
+    [log, stderr, status]
+  end
+
+  def reexec_line(log)
+    log.find { |line| line.start_with?("bundle exec ") }
+  end
+
+  def write_stub(dir, name, body)
+    FileUtils.mkdir_p(dir)
+    path = File.join(dir, name)
+    File.write(path, "#!/bin/sh\necho \"#{name} $*\" >> \"$STUB_LOG\"\n#{body}")
+    File.chmod(0o755, path)
   end
 end

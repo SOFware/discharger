@@ -1,30 +1,44 @@
 #!/usr/bin/env ruby
 
-# Path to the application root.
-APP_ROOT = File.expand_path("..", __dir__)
+script = File.expand_path(__FILE__)
+Dir.chdir(File.expand_path("..", __dir__))
 
-Dir.chdir(APP_ROOT) do
-  # This script uses Discharger to set up your development environment automatically.
-  # All setup steps are configured in config/setup.yml
-  # This script is idempotent, so you can run it at any time and get an expectable outcome.
-
-  # Find discharger gem path from Gemfile without loading bundler
-  # (loading bundler early can cause gem version conflicts)
-  gemfile = File.read("Gemfile")
-  if (match = gemfile.match(/gem\s+["']discharger["'].*path:\s*["']([^"']+)["']/))
-    discharger_path = File.expand_path(match[1], APP_ROOT)
-    $LOAD_PATH.unshift(File.join(discharger_path, "lib"))
-  else
-    # Fall back to installed gem
-    begin
-      gem "discharger"
-    rescue Gem::MissingSpecError
-      puts "Could not find discharger gem."
-      puts "If using a custom bundle path, try: bundle exec bin/setup"
-      exit 1
+# First pass, standard library only: the bundle may not exist yet. Re-exec
+# under bundle exec before yaml loads, or a default psych clashes with Gemfile.lock.
+# Mirrors the github_packages and bundler steps, which re-run under bundle exec.
+unless ENV["DISCHARGER_SETUP_BUNDLED"]
+  def store_github_packages_credentials
+    require "yaml"
+    source = begin
+      YAML.safe_load_file("config/setup.yml")&.dig("github_packages", "source")
+    rescue SystemCallError, Psych::Exception
+      nil # reported by Discharger::Setup on the second pass
     end
+    return if source.to_s.empty?
+    unless `gh auth status 2>&1`.include?("read:packages")
+      warn "Skipping #{source} credentials: the gh token lacks read:packages (gh auth refresh -s read:packages)"
+      return
+    end
+
+    username = `gh api user --jq .login 2>/dev/null`.strip
+    token = `gh auth token 2>/dev/null`.strip
+    return if username.empty? || token.empty?
+
+    system("bundle", "config", "set", "--local", source, "#{username}:#{token}", out: File::NULL, err: File::NULL)
   end
 
-  require "discharger/setup"
-  Discharger::Setup.run("config/setup.yml")
+  unless system("bundle", "check", out: File::NULL, err: File::NULL)
+    store_github_packages_credentials
+    system("bundle", "install") || abort(<<~MSG)
+
+      == bundle install failed ==
+      If the Gemfile uses a private GitHub Packages source, run `gh auth login`
+      (or `gh auth refresh -s read:packages`) and rerun bin/setup.
+    MSG
+  end
+
+  exec({"DISCHARGER_SETUP_BUNDLED" => "1"}, "bundle", "exec", RbConfig.ruby, script, *ARGV)
 end
+
+require "discharger/setup"
+Discharger::Setup.run("config/setup.yml")
