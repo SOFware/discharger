@@ -471,7 +471,7 @@ module Discharger
           if chat_token.blank?
             sysecho <<~MSG.bg(:yellow).black
               Slack message not sent: chat_token is not set.
-              Set it with the Slack release token from Bitwarden before the next release.
+              Set it with the Slack release token from your team's password manager before the next release.
             MSG
             echo_unsent_slack_message(args[:text], args[:channel])
             next

@@ -1029,7 +1029,7 @@ class DischargerSlackTaskTest < Minitest::Test
     stub_slack_client(-> { flunk "Built a Slack client without a token" }) do
       output, _ = capture_io { task.invoke("Released 1.2.3") }
       assert_match(/Slack message not sent: chat_token is not set\./, output)
-      assert_match(/Slack release token from Bitwarden/, output)
+      assert_match(/Slack release token from your team.s password manager/, output)
       assert_match(/Post this to #releases yourself:\n\nReleased 1\.2\.3\n/, output)
     end
     assert_nil @task.last_message_ts
