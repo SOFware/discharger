@@ -8,7 +8,14 @@ module Discharger
         default: "bin/setup",
         desc: "Path where the setup script should be created"
 
+      class_option :setup_only,
+        type: :boolean,
+        default: false,
+        desc: "Only (re)generate the setup script, leaving config/setup.yml and the initializer alone"
+
       def copy_initializer
+        return if options[:setup_only]
+
         template "discharger_initializer.rb", "config/initializers/discharger.rb"
       end
 
@@ -18,6 +25,8 @@ module Discharger
       end
 
       def create_sample_setup_yml
+        return if options[:setup_only]
+
         template "setup.yml", "config/setup.yml"
       end
     end

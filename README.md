@@ -225,6 +225,19 @@ run, so an app whose boot needs `.env` or `config/database.yml` copies them in
 Each step prints its elapsed time when it finishes, and the closing line reports the
 total, so a slow setup shows which step to look at.
 
+### Keeping bin/setup Generated
+
+`bin/setup` is a verbatim copy of the gem's template and opens with a notice saying
+so. Do not hand-edit it in an app: app-specific work belongs in `config/setup.yml`
+(`pre_steps`, `steps`, `custom_steps`), and changes to the script itself belong in
+this gem's template so every app picks them up. After bumping to a discharger
+release that changed the template, regenerate the script without touching
+`config/setup.yml` or the initializer:
+
+```bash
+$ bin/rails generate discharger:install --setup-only --force
+```
+
 ### Configuration
 
 The setup process is configured through `config/setup.yml`. Here's an example configuration:
