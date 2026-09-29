@@ -6,9 +6,11 @@ module Discharger
   module SetupRunner
     module Commands
       # Stores bundler credentials for a private GitHub Packages gem source
-      # using the GitHub CLI, so Gemfiles don't need embedded tokens.
-      # Credentials are written to the app's .bundle/config — keep .bundle
-      # gitignored. Run this step before "bundler" in setup.yml.
+      # using the GitHub CLI, so Gemfiles don't need embedded tokens. A token
+      # the source rejects is not stored, so it cannot shadow a working
+      # credential in the user's own bundler config. Credentials are written
+      # to the app's .bundle/config — keep .bundle gitignored. Run this step
+      # before "bundler" in setup.yml.
       class GithubPackagesCommand < BaseCommand
         # A configured source with nothing scheduled to store its credentials
         # is inert, and the only symptom is bundler failing against the
@@ -59,13 +61,14 @@ module Discharger
             return
           end
 
-          store_bundler_credentials(username, token)
-          if credentials_valid?(username, token)
-            log "Configured bundler credentials for #{source}"
-          else
-            log "#{source} rejected the stored credentials. Your gh token may lack " \
-              "the read:packages scope — run `gh auth refresh -s read:packages` and rerun setup."
+          unless credentials_valid?(username, token)
+            log "#{source} rejected the gh token, so bundler credentials were left alone. The token " \
+              "may lack the read:packages scope — run `gh auth refresh -s read:packages` and rerun setup."
+            return
           end
+
+          store_bundler_credentials(username, token)
+          log "Configured bundler credentials for #{source}"
         end
 
         def can_execute?

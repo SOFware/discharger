@@ -211,6 +211,33 @@ $ bin/setup
 
 This script is idempotent - you can run it multiple times safely, and it will ensure your environment is properly configured.
 
+It works on a fresh clone with no gems installed. The generated script first runs a
+standard-library-only pass that stores bundler credentials for a configured
+`github_packages` source (from your GitHub CLI login, when its token has the
+`read:packages` scope), installs the bundle, and then
+re-execs itself under `bundle exec` so default gems such as psych never clash with
+`Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
+pass; the `github_packages` step later verifies the stored credentials and warns when
+the token lacks the `read:packages` scope. Rails still has to boot before the steps
+run, so an app whose boot needs `.env` or `config/database.yml` copies them in
+`pre_steps` (see below).
+
+Each step prints its elapsed time when it finishes, and the closing line reports the
+total, so a slow setup shows which step to look at.
+
+### Keeping bin/setup Generated
+
+`bin/setup` is a verbatim copy of the gem's template and opens with a notice saying
+so. Do not hand-edit it in an app: app-specific work belongs in `config/setup.yml`
+(`pre_steps`, `steps`, `custom_steps`), and changes to the script itself belong in
+this gem's template so every app picks them up. After bumping to a discharger
+release that changed the template, regenerate the script without touching
+`config/setup.yml` or the initializer:
+
+```bash
+$ bin/rails generate discharger:install --setup-only --force
+```
+
 ### Configuration
 
 The setup process is configured through `config/setup.yml`. Here's an example configuration:

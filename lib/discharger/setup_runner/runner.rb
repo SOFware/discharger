@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "logger"
+require_relative "../timing"
 require_relative "command_factory"
 
 module Discharger
@@ -27,12 +28,14 @@ module Discharger
 
         warn_unscheduled_commands
 
-        FileUtils.chdir app_root do
-          execute_commands
+        elapsed = Timing.measure do
+          FileUtils.chdir app_root do
+            execute_commands
+          end
         end
 
         unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
-          puts Rainbow("\n✅ Setup completed successfully!").bright.green
+          puts Rainbow(format("\n✅ Setup completed successfully! (%.2fs)", elapsed)).bright.green
         end
       rescue => e
         unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
@@ -108,7 +111,10 @@ module Discharger
         unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           puts Rainbow("\n▶️  #{command.description}").bright
         end
-        command.execute
+        elapsed = Timing.measure { command.execute }
+        unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
+          puts Rainbow(format("   %s: %.2fs", command.description, elapsed)).faint
+        end
       rescue => e
         unless ENV["QUIET_SETUP"] || ENV["DISABLE_OUTPUT"]
           require "rainbow"
