@@ -33,12 +33,7 @@ module Discharger
 
     attr_accessor :name
 
-    attr_accessor :description
-
     attr_accessor :working_branch
-    attr_accessor :staging_branch
-    attr_accessor :production_branch
-    attr_accessor :auto_deploy_staging
 
     attr_accessor :release_message_channel
     attr_accessor :version_constant
@@ -61,15 +56,19 @@ module Discharger
       }
     )
 
+    REMOVED_SETTINGS = %i[staging_branch production_branch auto_deploy_staging description].freeze
+
+    REMOVED_SETTINGS.each do |setting|
+      define_method(:"#{setting}=") do |_value|
+        warn "#{setting} was removed in discharger 0.5.0 and does nothing. Delete it from the Rakefile."
+      end
+    end
+
     def initialize(name = :release, tasker: Rake::Task)
       @name = name
       @tasker = tasker
-      @working_branch = "develop"
-      @staging_branch = "stage"
-      @production_branch = "main"
-      @description = "Release the current version to #{staging_branch}"
+      @working_branch = "main"
       @clear_fragments = true
-      @auto_deploy_staging = false
     end
     private attr_reader :tasker
 
@@ -107,10 +106,6 @@ module Discharger
       end
       if block_given?
         success = !!yield(stdout, stderr, status)
-        # If the error reports that a rule was bypassed, consider the command successful
-        # because we are bypassing the rule intentionally when merging the release branch
-        # to the production branch.
-        success = true if stderr.match?(/bypassed rule violations/i)
         abort(stderr) unless success
       end
       success
@@ -119,21 +114,6 @@ module Discharger
     def sysecho(message, output: $stdout)
       output.puts message
       true
-    end
-
-    # Abort if staging branch has different VERSION than working branch
-    def validate_version_match!(staging, working, output: $stdout)
-      staging_v = git_show_version(staging)
-      working_v = git_show_version(working)
-
-      return sysecho("✓ Versions match (#{working_v})".bg(:green).black, output:) if staging_v == working_v
-
-      abort <<~ERROR.bg(:red).white
-        VERSION mismatch: #{staging}=#{staging_v || "not found"}, #{working}=#{working_v || "not found"}
-
-        Run: rake #{name}:stage
-        Then retry: rake #{name}
-      ERROR
     end
 
     # The newest commit that changed the current version's dated changelog section
@@ -154,29 +134,6 @@ module Discharger
 
       sysecho("✓ Release commit: #{sha[0, 8]}".bg(:green).black, output:)
       sha
-    end
-
-    def merge_tag_into_production_branch(tag, output: $stdout)
-      git = ->(*args) do
-        stdout, stderr, status = Open3.capture3("git", *args)
-        return stdout.strip if status.success?
-
-        sysecho("Could not merge #{tag} into #{production_branch}: #{stderr.strip}".bg(:yellow).black, output:)
-        nil
-      end
-
-      return false unless git.call("fetch", "origin", production_branch)
-      return false unless (tree = git.call("merge-tree", "--write-tree", "origin/#{production_branch}", tag))
-      return false unless (commit = git.call("commit-tree", tree, "-p", "origin/#{production_branch}", "-p", "#{tag}^{commit}", "-m", "Merge tag '#{tag}'"))
-      return false unless git.call("push", "origin", "#{commit}:refs/heads/#{production_branch}")
-
-      sysecho("✓ Merged #{tag} into #{production_branch}".bg(:green).black, output:)
-    end
-
-    def git_show_version(branch)
-      content, _, status = Open3.capture3("git", "show", "origin/#{branch}:#{version_file}")
-      return nil unless status.success?
-      content[/VERSION\s*=\s*["']([^"']+)["']/, 1]
     end
 
     def git_file_commits(branch, path)
@@ -222,6 +179,8 @@ module Discharger
     end
 
     def ensure_branch_not_ahead!(branch)
+      return true unless local_branch?(branch)
+
       stdout, _, status = Open3.capture3("git", "rev-list", "--count", "origin/#{branch}..#{branch}")
       return true if status.success? && stdout.strip == "0"
 
@@ -230,6 +189,44 @@ module Discharger
 
         Push or remove them before retrying.
       ERROR
+    end
+
+    def ensure_tag_absent!(tag)
+      stdout, stderr, status = Open3.capture3("git", "ls-remote", "--tags", "origin", "refs/tags/#{tag}")
+      abort "Could not list tags on origin: #{stderr}" unless status.success?
+      return true if stdout.strip.empty?
+
+      abort <<~ERROR.bg(:red).white
+        Tag #{tag} already exists on origin.
+
+        Bump the version, or delete the tag if it was pushed by mistake, before releasing.
+      ERROR
+    end
+
+    def local_branch?(branch)
+      _, _, status = Open3.capture3("git", "rev-parse", "--verify", "--quiet", "refs/heads/#{branch}")
+      status.success?
+    end
+
+    def fetch_working_branch!
+      syscall(["git fetch origin #{working_branch}"])
+    end
+
+    def checkout_working_branch!
+      syscall(
+        ["git checkout #{working_branch}"],
+        ["git reset --hard origin/#{working_branch}"]
+      )
+    end
+
+    def confirm_or_exit!
+      sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
+      exit if $stdin.gets.chomp.match?(/^x/i)
+    end
+
+    def post_to_slack(text, emoji = nil, thread_ts = nil)
+      tasker["#{name}:slack"].reenable
+      tasker["#{name}:slack"].invoke(text, release_message_channel, emoji, thread_ts)
     end
 
     # The post-release steps collected from "Runbook:" commit trailers.
@@ -254,15 +251,13 @@ module Discharger
     end
 
     # Post the runbook as a reply in a Slack thread, when a runbook is
-    # configured. Reuses the same message on the stage build and the
-    # production release. Returns the message posted, or nil when there is
-    # no thread to reply to or no runbook to announce.
+    # configured. Returns the message posted, or nil when there is no thread
+    # to reply to or no runbook to announce.
     def post_runbook_to_thread(version, thread_ts)
       return unless thread_ts.present?
       return unless (message = runbook_announcement(version))
 
-      tasker["#{name}:slack"].reenable
-      tasker["#{name}:slack"].invoke(message, release_message_channel, ":clipboard:", thread_ts)
+      post_to_slack(message, ":clipboard:", thread_ts)
       message
     end
 
@@ -284,16 +279,6 @@ module Discharger
       pr.empty? ? nil : pr
     end
 
-    def pr_already_merged?(pr_ref)
-      stdout, _, status = Open3.capture3(
-        "gh", "pr", "view", pr_ref.to_s,
-        "--json", "state",
-        "--jq", ".state"
-      )
-      return false unless status.success?
-      stdout.strip == "MERGED"
-    end
-
     def define
       require "slack-ruby-client"
       Slack.configure do |config|
@@ -301,11 +286,11 @@ module Discharger
       end
 
       desc <<~DESC
-        ---------- STEP 3 ----------
+        ---------- STEP 2 ----------
         Release the current version to production
 
-        This task merges the release branch into production via a GitHub pull
-        request and tags the current version.
+        This task tags the release commit on #{working_branch} and pushes the
+        tag. Production deploys from the tag.
 
         After the release is complete, a new branch will be created to bump the
         version for the next release.
@@ -315,80 +300,37 @@ module Discharger
           abort "Error: GitHub CLI (gh) is required for the release process but was not found. Install it: https://cli.github.com"
         end
         validate_pr_label!
+        ensure_clean_worktree!
 
         current_version = Object.const_get(version_constant)
+        tag = "v#{current_version}"
 
-        # When auto_deploy_staging is enabled, release directly from working_branch
-        # instead of staging_branch (for CI/CD pipelines that auto-deploy staging)
-        release_source = auto_deploy_staging ? working_branch : staging_branch
-
-        release_action = if auto_deploy_staging
-          "This will tag the release commit on #{working_branch}, push the tag, and merge it into #{production_branch}."
-        else
-          "This will tag the current version and push it to the production branch."
-        end
+        fetch_working_branch!
+        ensure_branch_not_ahead!(working_branch)
+        ensure_tag_absent!(tag)
+        tag_ref = find_release_commit!("origin/#{working_branch}")
 
         sysecho <<~MSG
           Releasing version #{current_version} to production.
 
-          #{release_action}
-          Release source: #{release_source}
+          This will tag #{tag_ref[0, 8]} on #{working_branch} as #{tag} and push the tag.
         MSG
-        sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-        input = $stdin.gets
-        exit if input.chomp.match?(/^x/i)
+        confirm_or_exit!
+
+        checkout_working_branch!
 
         syscall(
-          ["git checkout #{working_branch}"],
-          ["git branch -D #{staging_branch} 2>/dev/null || true"],
-          ["git branch -D #{production_branch} 2>/dev/null || true"]
+          ["git tag -a #{tag} -m 'Release #{current_version}' #{tag_ref}"],
+          ["git push origin #{tag}"]
         )
 
-        if auto_deploy_staging
-          syscall(["git fetch origin #{working_branch}"])
-          ensure_branch_not_ahead!(working_branch)
-          syscall(["git reset --hard origin/#{working_branch}"])
-          tag_ref = find_release_commit!(release_source)
-        else
-          syscall(
-            ["git fetch origin #{release_source}:#{release_source} #{production_branch}:#{production_branch}"]
-          )
-          validate_version_match!(staging_branch, working_branch)
-
-          pr_ref = release_source
-          if pr_already_merged?(pr_ref)
-            sysecho "PR #{pr_ref} is already merged. Continuing..."
-          else
-            syscall(
-              ["gh pr merge #{pr_ref} --merge"]
-            )
-          end
-
-          syscall(["git fetch origin #{production_branch}:#{production_branch}"])
-          tag_ref = production_branch
+        post_to_slack("Released #{app_name} #{current_version} (#{tag_ref[0, 8]}) to production.", ":chipmunk:")
+        # Capture the root before replying; each post overwrites last_message_ts.
+        if (thread_ts = last_message_ts).present?
+          changelog = git_show_at_commit(tag_ref, changelog_file) || File.read(Rails.root.join(changelog_file))
+          post_to_slack(changelog, ":log:", thread_ts)
+          post_runbook_to_thread(current_version, thread_ts)
         end
-
-        slack_sha = auto_deploy_staging ? tag_ref[0, 8] : commit_identifier.call
-        continue = syscall(
-          ["git tag -a v#{current_version} -m 'Release #{current_version}' #{tag_ref}"],
-          ["git push origin v#{current_version}"]
-        ) do
-          tasker["#{name}:slack"].invoke("Released #{app_name} #{current_version} (#{slack_sha}) to production.", release_message_channel, ":chipmunk:")
-          # Capture the root before replying; each post overwrites last_message_ts.
-          thread_ts = last_message_ts
-          if thread_ts.present?
-            text = git_show_at_commit(tag_ref, changelog_file) || File.read(Rails.root.join(changelog_file))
-            tasker["#{name}:slack"].reenable
-            tasker["#{name}:slack"].invoke(text, release_message_channel, ":log:", thread_ts)
-
-            post_runbook_to_thread(current_version, thread_ts)
-          end
-          # Signal success — no branch switch needed since we stay on working_branch throughout
-          true
-        end
-
-        abort "Release failed." unless continue
-        merge_tag_into_production_branch("v#{current_version}") if auto_deploy_staging
 
         sysecho <<~MSG
           Version #{current_version} released to production.
@@ -436,30 +378,6 @@ module Discharger
           sysecho "----------------------------------".bg(:green).black
         end
 
-        desc description
-        task build: :environment do
-          if auto_deploy_staging
-            sysecho "Note: auto_deploy_staging is enabled. Staging deploys automatically from #{working_branch}.".bg(:yellow).black
-          end
-
-          # Allow overriding the working branch via environment variable
-          build_branch = ENV["DISCHARGER_BUILD_BRANCH"] || working_branch
-
-          syscall(
-            ["git fetch origin #{build_branch}"],
-            ["git checkout #{build_branch}"],
-            ["git reset --hard origin/#{build_branch}"],
-            ["git branch -D #{staging_branch} 2>/dev/null || true"],
-            ["git checkout -b #{staging_branch}"],
-            ["git push origin #{staging_branch} --force"]
-          ) do
-            current_version = Object.const_get(version_constant)
-            tasker["#{name}:slack"].invoke("Building #{app_name} #{current_version} (#{commit_identifier.call}) on #{staging_branch}.", release_message_channel)
-            post_runbook_to_thread(current_version, last_message_ts)
-            syscall ["git checkout #{build_branch}"]
-          end
-        end
-
         desc "Send a message to Slack."
         task :slack, [:text, :channel, :emoji, :ts] => :environment do |_, args|
           instance_variable_set(:@last_message_ts, nil)
@@ -495,7 +413,7 @@ module Discharger
 
         desc <<~DESC
           ---------- STEP 1 ----------
-          Prepare the current version for release to production (#{production_branch})
+          Prepare the current version for release to production
 
           This task will create a new branch to prepare the release. The CHANGELOG
           will be updated and the version will be bumped. The branch will be pushed
@@ -511,15 +429,10 @@ module Discharger
           current_version = Object.const_get(version_constant)
           finish_branch = "bump/finish-#{current_version.tr(".", "-")}"
 
-          syscall(
-            ["git fetch origin #{working_branch}"],
-            ["git checkout #{working_branch}"]
-          )
+          fetch_working_branch!
           ensure_branch_not_ahead!(working_branch)
-          syscall(
-            ["git reset --hard origin/#{working_branch}"],
-            ["git checkout -b #{finish_branch}"]
-          )
+          checkout_working_branch!
+          syscall(["git checkout -b #{finish_branch}"])
           sysecho <<~MSG
             Branch #{finish_branch} created.
 
@@ -528,18 +441,14 @@ module Discharger
             If you need to make changes, edit the CHANGELOG and save the file.
             Then return here to continue with this commit.
           MSG
-          sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-          input = $stdin.gets
-          exit if input.chomp.match?(/^x/i)
+          confirm_or_exit!
 
           tasker["reissue:finalize"].invoke
 
-          next_step = auto_deploy_staging ? "rake #{name}" : "rake #{name}:stage"
-          next_step_desc = auto_deploy_staging ? "release to production" : "stage the release branch"
           after_merge = <<~MSG.chomp
             Once the PR is merged, pull down #{working_branch} and run
-              '#{next_step}'
-            to #{next_step_desc}.
+              'rake #{name}'
+            to release to production.
           MSG
 
           if pr_label
@@ -581,50 +490,6 @@ module Discharger
                 ["open", pr_url]
             end
           end
-        end
-
-        desc <<~DESC
-          ---------- STEP 2 ----------
-          Stage the release branch
-
-          This task will update Stage, open a PR, and instruct you on the next steps.
-
-          NOTE: If you just want to update the stage environment but aren't ready to release, run:
-
-              bin/rails #{name}:build
-        DESC
-        task stage: [:environment] do
-          if auto_deploy_staging
-            sysecho <<~MSG.bg(:yellow).black
-              Note: auto_deploy_staging is enabled.
-              Staging is handled automatically when code is pushed to #{working_branch}.
-              To release to production, run: 'rake #{name}'
-            MSG
-            next
-          end
-
-          tasker["build"].invoke
-          current_version = Object.const_get(version_constant)
-
-          params = {
-            expand: 1,
-            title: "Stage to Main",
-            body: <<~BODY
-              Deploy #{current_version} to production.
-            BODY
-          }
-
-          pr_url = "#{pull_request_url}/compare/#{production_branch}...#{staging_branch}?#{params.to_query}"
-
-          sysecho <<~MSG
-            Branch #{staging_branch} updated.
-            Open a PR to #{production_branch} to release the version.
-
-            Opening PR: #{pr_url}
-
-            Once the PR is **approved**, run 'rake release' to release the version.
-          MSG
-          syscall ["open", pr_url]
         end
       end
     end
