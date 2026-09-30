@@ -250,6 +250,9 @@ database:
   name: "db-your-app"
   version: "14"
   password: "postgres"
+  # Optional. DB_NAME exported before Rails boots; defaults to the container
+  # name without "db-". false leaves it to database.yml.
+  # db_name: "your-app"
   # Optional. Controls how the docker step handles a native PostgreSQL
   # already listening on the configured port:
   #   omitted/nil/false - silently skip Docker and use the native instance (legacy default)

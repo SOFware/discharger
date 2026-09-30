@@ -39,7 +39,7 @@ module Discharger
     end
 
     class DatabaseConfig
-      attr_accessor :port, :name, :version, :password, :prefer_docker
+      attr_accessor :port, :name, :version, :password, :prefer_docker, :db_name
 
       def initialize
         @port = 5432
@@ -47,6 +47,7 @@ module Discharger
         @version = "14"
         @password = "postgres"
         @prefer_docker = nil
+        @db_name = nil
       end
 
       def from_hash(hash)
@@ -55,6 +56,7 @@ module Discharger
         @version = hash["version"] if hash["version"]
         @password = hash["password"] if hash["password"]
         @prefer_docker = hash["prefer_docker"] if hash.key?("prefer_docker")
+        @db_name = hash["db_name"] if hash.key?("db_name")
       end
     end
 

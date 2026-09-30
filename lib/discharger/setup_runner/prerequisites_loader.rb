@@ -86,15 +86,17 @@ module Discharger
       end
 
       def set_db_name(db_config)
-        if db_config["name"] && !ENV["DB_NAME"]
-          container_name = db_config["name"].to_s
-          db_name = container_name.sub(/^db-/, "")
+        return if db_config["db_name"] == false
+
+        container_name = db_config["name"].to_s
+        db_name = (db_config["db_name"] || container_name.sub(/^db-/, "")).to_s
+        return if db_name.empty?
+
+        if ENV["DB_NAME"]
+          warn_if_mismatch("DB_NAME", ENV["DB_NAME"], db_name)
+        else
           ENV["DB_NAME"] = db_name
           puts "  Setting DB_NAME=#{db_name} from config/setup.yml (container: #{container_name})"
-        elsif ENV["DB_NAME"]
-          container_name = db_config["name"].to_s
-          expected_db_name = container_name.sub(/^db-/, "")
-          warn_if_mismatch("DB_NAME", ENV["DB_NAME"], expected_db_name)
         end
       end
 
