@@ -329,6 +329,7 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     task.define_singleton_method(:sysecho) { |*_args, **_kwargs| true }
     task.define_singleton_method(:validate_version_match!) { |*_args, **_kwargs| true }
     task.define_singleton_method(:find_release_commit!) { |*_args, **_kwargs| FAKE_RELEASE_SHA }
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch| true }
     task.define_singleton_method(:pr_already_merged?) { |_ref| false }
     task.define_singleton_method(:merge_tag_into_production_branch) { |tag, **_kwargs| commands << ["merge_tag_into_production_branch", tag] }
 
@@ -403,6 +404,26 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Should fetch the working branch"
     assert command_issued?("git reset --hard origin/develop"),
       "Should reset working branch to match remote"
+  end
+
+  def test_auto_deploy_mode_refuses_to_reset_over_unpushed_commits
+    task = build_task(:rel_guard_seq, auto_deploy: true)
+    ahead_checked_at = nil
+    commands = @commands
+    task.define_singleton_method(:ensure_branch_not_ahead!) { |_branch|
+      ahead_checked_at = commands.length
+      true
+    }
+    task.define
+    $stdin = StringIO.new("\n")
+
+    capture_io { Rake::Task["rel_guard_seq"].invoke }
+
+    reset_idx = @commands.index { |c| c.join(" ") == "git reset --hard origin/develop" }
+    assert reset_idx, "Expected a reset from origin"
+    assert ahead_checked_at, "Expected the unpushed-commit check to run"
+    assert_operator ahead_checked_at, :<=, reset_idx,
+      "Unpushed-commit check must run before the reset"
   end
 
   def test_prepare_resets_working_branch_from_origin_before_branching

@@ -345,10 +345,9 @@ module Discharger
         )
 
         if auto_deploy_staging
-          syscall(
-            ["git fetch origin #{working_branch}"],
-            ["git reset --hard origin/#{working_branch}"]
-          )
+          syscall(["git fetch origin #{working_branch}"])
+          ensure_branch_not_ahead!(working_branch)
+          syscall(["git reset --hard origin/#{working_branch}"])
           tag_ref = find_release_commit!(release_source)
         else
           syscall(
