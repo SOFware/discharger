@@ -4,6 +4,8 @@ require "rails/generators/test_case"
 require "open3"
 
 class InstallGeneratorTest < Rails::Generators::TestCase
+  include StubRegistry
+
   tests Discharger::Generators::InstallGenerator
   destination File.expand_path("../tmp", __dir__)
 
@@ -33,9 +35,9 @@ class InstallGeneratorTest < Rails::Generators::TestCase
   end
 
   test "generated setup stores GitHub Packages credentials before installing a missing bundle" do
-    log = run_generated_setup(bundle_check_status: 1)
+    log = with_stub_registry("200 OK") { |source| run_generated_setup(bundle_check_status: 1, source: source) }
 
-    config_set = log.index("bundle config set --local https://rubygems.pkg.github.com/example octocat:gh-test-token")
+    config_set = log.index { |line| line.start_with?("bundle config set --local http://127.0.0.1:") && line.end_with?("/example octocat:gh-test-token") }
     install = log.index("bundle install")
     assert config_set, "expected credentials to be stored, got:\n#{log.join("\n")}"
     assert install, "expected bundle install, got:\n#{log.join("\n")}"
@@ -58,13 +60,22 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_includes log, "bundle install"
   end
 
-  test "generated setup leaves bundler credentials alone when the gh token lacks read:packages" do
-    log, stderr, status = run_generated_setup_raw(bundle_check_status: 1, gh_scopes: "'repo', 'workflow'")
+  test "generated setup leaves bundler credentials alone when the source rejects the gh token" do
+    log, stderr, status = with_stub_registry("401 Unauthorized") do |source|
+      run_generated_setup_raw(bundle_check_status: 1, source: source)
+    end
 
     assert status.success?, stderr
     assert_empty log.grep(/\Abundle config set/)
     assert_includes log, "bundle install"
     assert_match(/gh auth refresh -s read:packages/, stderr)
+  end
+
+  test "generated setup leaves bundler credentials alone when the source is unreachable" do
+    log = run_generated_setup(bundle_check_status: 1, source: unreachable_registry)
+
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
   end
 
   test "generated setup re-execs from the app root when invoked elsewhere" do
@@ -162,14 +173,14 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     log
   end
 
-  def run_generated_setup_raw(bundle_check_status:, bundle_install_status: 0, gh_auth_status: 0, gh_scopes: "'repo', 'read:packages'", from: destination_root, setup_yml: true)
+  def run_generated_setup_raw(bundle_check_status:, bundle_install_status: 0, gh_auth_status: 0, source: "https://rubygems.pkg.github.com/example", from: destination_root, setup_yml: true)
     run_generator
     File.write(File.join(destination_root, "Gemfile"), "source 'https://rubygems.org'\n")
     if setup_yml
       File.write(File.join(destination_root, "config/setup.yml"), <<~YAML)
         app_name: TestApp
         github_packages:
-          source: "https://rubygems.pkg.github.com/example"
+          source: "#{source}"
       YAML
     else
       FileUtils.rm_f(File.join(destination_root, "config/setup.yml"))
@@ -187,7 +198,6 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     SH
     write_stub(stubs, "gh", <<~SH)
       case "$*" in
-        "auth status") [ #{gh_auth_status} -eq 0 ] && echo "Token scopes: #{gh_scopes}"; exit #{gh_auth_status} ;;
         "api user --jq .login") [ #{gh_auth_status} -eq 0 ] && echo octocat; exit #{gh_auth_status} ;;
         "auth token") echo gh-test-token ;;
       esac

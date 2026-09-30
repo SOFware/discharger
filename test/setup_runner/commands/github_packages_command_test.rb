@@ -9,6 +9,7 @@ require "socket"
 class GithubPackagesCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
   include Capture3Stubbing
+  include StubRegistry
 
   SOURCE = "https://rubygems.pkg.github.com/example"
 
@@ -159,10 +160,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
 
   test "execute treats an unreachable source as unverifiable, not invalid" do
     io = StringIO.new
-    server = TCPServer.new("127.0.0.1", 0)
-    port = server.addr[1]
-    server.close
-    command = probing_command(io, "http://127.0.0.1:#{port}/example")
+    command = probing_command(io, unreachable_registry)
 
     command.execute
 
@@ -244,22 +242,6 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       command: command)
     command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
     command
-  end
-
-  # Minimal one-request HTTP server so the probe hits a real socket.
-  def with_stub_registry(status_line)
-    server = TCPServer.new("127.0.0.1", 0)
-    port = server.addr[1]
-    thread = Thread.new do
-      client = server.accept
-      while (line = client.gets) && line != "\r\n"; end
-      client.write "HTTP/1.1 #{status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-      client.close
-    end
-    yield "http://127.0.0.1:#{port}/example"
-  ensure
-    thread&.kill
-    server&.close
   end
 
   def stub_shell(gh_installed:, authenticated:, gh_outputs:, command: @command)

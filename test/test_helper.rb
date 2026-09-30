@@ -21,6 +21,35 @@ require "discharger/task"
 require "debug"
 require "open3"
 
+# Serves one HTTP request on a local port with the given status line and
+# yields the URL to use as a GitHub Packages source.
+module StubRegistry
+  def with_stub_registry(status_line)
+    require "socket"
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.addr[1]
+    thread = Thread.new do
+      client = server.accept
+      while (line = client.gets) && line != "\r\n"; end
+      client.write "HTTP/1.1 #{status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+      client.close
+    end
+    yield "http://127.0.0.1:#{port}/example"
+  ensure
+    thread&.kill
+    server&.close
+  end
+
+  # A URL nothing listens on.
+  def unreachable_registry
+    require "socket"
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.addr[1]
+    server.close
+    "http://127.0.0.1:#{port}/example"
+  end
+end
+
 # Swaps Open3.capture3 for the duration of a block, restoring the original
 # even when the block raises. Returns the argv arrays capture3 was called
 # with, so callers can assert on the executed command.

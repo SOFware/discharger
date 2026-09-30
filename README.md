@@ -209,12 +209,12 @@ After installing Discharger, run the setup script to configure your development 
 $ bin/setup
 ```
 
-This script is idempotent - you can run it multiple times safely, and it will ensure your environment is properly configured.
+You can rerun it whenever your environment drifts. Every run drops and rebuilds the development and test databases, so local data is lost.
 
 It works on a fresh clone with no gems installed. The generated script first runs a
 standard-library-only pass that stores bundler credentials for a configured
-`github_packages` source (from your GitHub CLI login, when its token has the
-`read:packages` scope), installs the bundle, and then
+`github_packages` source (from your GitHub CLI login, only once the source
+accepts that token), installs the bundle, and then
 re-execs itself under `bundle exec` so default gems such as psych never clash with
 `Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
 pass; the `github_packages` step later verifies the stored credentials and warns when
@@ -250,6 +250,9 @@ database:
   name: "db-your-app"
   version: "14"
   password: "postgres"
+  # Optional. DB_NAME exported before Rails boots; defaults to the container
+  # name without "db-". false leaves it to database.yml.
+  # db_name: "your-app"
   # Optional. Controls how the docker step handles a native PostgreSQL
   # already listening on the configured port:
   #   omitted/nil/false - silently skip Docker and use the native instance (legacy default)
@@ -318,7 +321,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `docker` - Setup Docker containers
 - `pg_tools` - Create Docker-aware `pg_dump` and `psql` wrappers for apps that use `structure.sql` or call those tools directly
 - `env` - Configure environment variables
-- `database` - Setup and migrate database
+- `database` - Drop and recreate the development and test databases, load the schema, migrate, and seed. Every run resets local data.
 
 ### Selecting Specific Steps
 

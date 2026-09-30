@@ -104,6 +104,14 @@ module SetupRunnerTestHelper
     end
   end
 
+  def with_env(vars)
+    saved = vars.keys.to_h { |key| [key, ENV[key]] }
+    vars.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+    yield
+  ensure
+    saved.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+  end
+
   def with_tty_stdin
     original_stdin = $stdin
     tty_io = StringIO.new

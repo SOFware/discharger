@@ -173,6 +173,30 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     end
   end
 
+  test "db_name in config overrides the name derived from the container" do
+    create_file("setup.yml", <<~YAML)
+      database:
+        name: db-skedify
+        db_name: coordinator
+    YAML
+    with_env("DB_NAME" => nil) do
+      capture_io { Discharger::SetupRunner::PrerequisitesLoader.run("setup.yml") }
+      assert_equal "coordinator", ENV["DB_NAME"]
+    end
+  end
+
+  test "db_name: false leaves DB_NAME to the app" do
+    create_file("setup.yml", <<~YAML)
+      database:
+        name: db-skedify
+        db_name: false
+    YAML
+    with_env("DB_NAME" => nil) do
+      capture_io { Discharger::SetupRunner::PrerequisitesLoader.run("setup.yml") }
+      assert_nil ENV["DB_NAME"]
+    end
+  end
+
   test "runs pre_steps from config" do
     # Use a custom step name to avoid conflicting with built-in commands
     yaml_content = <<~YAML
