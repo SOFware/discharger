@@ -209,7 +209,7 @@ After installing Discharger, run the setup script to configure your development 
 $ bin/setup
 ```
 
-This script is idempotent - you can run it multiple times safely, and it will ensure your environment is properly configured.
+You can rerun it whenever your environment drifts. Every run drops and rebuilds the development and test databases, so local data is lost.
 
 It works on a fresh clone with no gems installed. The generated script first runs a
 standard-library-only pass that stores bundler credentials for a configured
@@ -321,7 +321,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `docker` - Setup Docker containers
 - `pg_tools` - Create Docker-aware `pg_dump` and `psql` wrappers for apps that use `structure.sql` or call those tools directly
 - `env` - Configure environment variables
-- `database` - Setup and migrate database
+- `database` - Drop and recreate the development and test databases, load the schema, migrate, and seed. Every run resets local data.
 
 ### Selecting Specific Steps
 
