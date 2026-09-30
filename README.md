@@ -213,8 +213,8 @@ This script is idempotent - you can run it multiple times safely, and it will en
 
 It works on a fresh clone with no gems installed. The generated script first runs a
 standard-library-only pass that stores bundler credentials for a configured
-`github_packages` source (from your GitHub CLI login, when its token has the
-`read:packages` scope), installs the bundle, and then
+`github_packages` source (from your GitHub CLI login, only once the source
+accepts that token), installs the bundle, and then
 re-execs itself under `bundle exec` so default gems such as psych never clash with
 `Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
 pass; the `github_packages` step later verifies the stored credentials and warns when
