@@ -12,9 +12,10 @@ require_relative "timing"
 #
 # This will automatically:
 # 1. Load bundler/setup (activates correct gem versions)
-# 2. Run pre_steps (before Rails loads) - env vars, homebrew, etc.
-# 3. Initialize Rails
-# 4. Run regular setup steps and custom_steps
+# 2. Create missing config/**/*.example and .env.example counterparts
+# 3. Run pre_steps (before Rails loads) - env vars, homebrew, etc.
+# 4. Initialize Rails
+# 5. Run regular setup steps and custom_steps
 #
 module Discharger
   class Setup
@@ -39,14 +40,17 @@ module Discharger
           # This must happen before we parse YAML to avoid psych version conflicts
           load_bundler
 
-          # Phase 2: Pre-Rails setup (env vars, system dependencies)
+          # Phase 2: Config files Rails needs to boot
+          create_example_files
+
+          # Phase 3: Pre-Rails setup (env vars, system dependencies)
           # These run AFTER bundler but BEFORE Rails loads
           run_prerequisites
 
-          # Phase 3: Load Rails (uses env vars from phase 2)
+          # Phase 4: Load Rails (uses env vars from phase 3)
           load_rails
 
-          # Phase 4: Run Discharger commands (after Rails loads)
+          # Phase 5: Run Discharger commands (after Rails loads)
           run_setup_commands
         end
 
@@ -79,6 +83,15 @@ module Discharger
 
     def load_bundler
       require "bundler/setup"
+    end
+
+    def create_example_files
+      require_relative "setup_runner/example_files"
+      created = SetupRunner::ExampleFiles.create_missing(app_root)
+      return if created.empty?
+
+      puts "\n== Created config files from their examples =="
+      created.each { |path| puts "  #{path}" }
     end
 
     def run_prerequisites

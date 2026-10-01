@@ -87,6 +87,14 @@ class ConfigCommandTest < ActiveSupport::TestCase
     assert_match(/Copied config\/database.yml.example to config\/database.yml/, log_output)
   end
 
+  test "execute leaves .env to the env step" do
+    create_file(".env.example", "SECRET=example")
+
+    @command.execute
+
+    refute_file_exists(".env")
+  end
+
   test "execute handles missing config directory gracefully" do
     # No config directory created
     @command.execute
