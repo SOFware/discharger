@@ -218,9 +218,10 @@ accepts that token), installs the bundle, and then
 re-execs itself under `bundle exec` so default gems such as psych never clash with
 `Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
 pass; the `github_packages` step later verifies the stored credentials and warns when
-the token lacks the `read:packages` scope. Rails still has to boot before the steps
-run, so an app whose boot needs `.env` or `config/database.yml` copies them in
-`pre_steps` (see below).
+the token lacks the `read:packages` scope. Before `pre_steps` or Rails run, setup
+creates every missing counterpart of `config/**/*.example` and `.env.example`, so an
+app whose boot needs `.env` or `config/database.yml` gets them without copying
+them in `pre_steps`.
 
 Each step prints its elapsed time when it finishes, and the closing line reports the
 total, so a slow setup shows which step to look at.
@@ -297,14 +298,15 @@ pre_steps:
   # - postgresql_tools
 ```
 
-You can also define custom pre_steps with shell commands:
+You can also define custom pre_steps with shell commands. `config/**/*.example` and
+`.env.example` counterparts are created before `pre_steps` run, so a step can rely
+on them, as Qualify's does here:
 
 ```yaml
 pre_steps:
   - homebrew
-  - description: "Set up environment variables"
-    command: "cp .env.example .env"
-    condition: "!File.exist?('.env')"
+  - description: "Check .env against .env.example"
+    command: "bin/check-env"
 ```
 
 ### Using Default Steps
@@ -317,10 +319,10 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `github_packages` - Store bundler credentials for a private GitHub Packages gem source using the GitHub CLI (run before `bundler`; requires a `github_packages.source` config entry)
 - `bundler` - Install Ruby gems
 - `yarn` - Install JavaScript packages
-- `config` - Copy configuration files
+- `config` - Copy Procfile.dev to Procfile and any example config file still missing
 - `docker` - Setup Docker containers
 - `pg_tools` - Create Docker-aware `pg_dump` and `psql` wrappers for apps that use `structure.sql` or call those tools directly
-- `env` - Configure environment variables
+- `env` - Create .env from .env.example if still missing
 - `database` - Drop and recreate the development and test databases, load the schema, migrate, and seed. Every run resets local data.
 
 ### Selecting Specific Steps

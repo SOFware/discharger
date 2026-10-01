@@ -168,6 +168,7 @@ class SetupTest < ActiveSupport::TestCase
 
     test_setup_class = Class.new(Discharger::Setup) do
       define_method(:load_bundler) { phases_called << :bundler }
+      define_method(:create_example_files) { phases_called << :example_files }
       define_method(:run_prerequisites) { phases_called << :prerequisites }
       define_method(:load_rails) { phases_called << :rails }
       define_method(:run_setup_commands) { phases_called << :setup_commands }
@@ -176,7 +177,53 @@ class SetupTest < ActiveSupport::TestCase
     setup = test_setup_class.new("config/setup.yml")
     capture_io { setup.run }
 
-    assert_equal [:bundler, :prerequisites, :rails, :setup_commands], phases_called
+    assert_equal [:bundler, :example_files, :prerequisites, :rails, :setup_commands], phases_called
+  end
+
+  test "run creates example config files before pre_steps and Rails" do
+    create_file("Gemfile", "source 'https://rubygems.org'")
+    create_file("config/setup.yml", "app_name: TestApp")
+    create_file("config/database.yml.example", "development:\n  adapter: postgresql")
+    create_file(".env.example", "SECRET=example")
+    create_file("config/application.yml", "existing: true")
+    create_file("config/application.yml.example", "existing: false")
+
+    present_at_prerequisites = nil
+    present_at_rails = nil
+    test_setup_class = Class.new(Discharger::Setup) do
+      define_method(:load_bundler) {}
+      define_method(:run_prerequisites) { present_at_prerequisites = File.exist?(".env") }
+      define_method(:load_rails) { present_at_rails = File.exist?("config/database.yml") }
+      define_method(:run_setup_commands) {}
+    end
+
+    output, _ = capture_io { test_setup_class.new("config/setup.yml").run }
+
+    assert present_at_prerequisites, ".env must exist when pre_steps run"
+    assert present_at_rails, "config/database.yml must exist when Rails loads"
+    assert_equal "existing: true", File.read("config/application.yml")
+    assert_match(/Created config files from their examples/, output)
+    assert_match(/^  \.env$/, output)
+    assert_match(/^  config\/database\.yml$/, output)
+  end
+
+  test "run says nothing about example files when none are missing" do
+    create_file("Gemfile", "source 'https://rubygems.org'")
+    create_file("config/setup.yml", "app_name: TestApp")
+    create_file(".env.example", "SECRET=example")
+    create_file(".env", "SECRET=mine")
+
+    test_setup_class = Class.new(Discharger::Setup) do
+      define_method(:load_bundler) {}
+      define_method(:run_prerequisites) {}
+      define_method(:load_rails) {}
+      define_method(:run_setup_commands) {}
+    end
+
+    output, _ = capture_io { test_setup_class.new("config/setup.yml").run }
+
+    refute_match(/Created config files/, output)
+    assert_equal "SECRET=mine", File.read(".env")
   end
 
   test "run changes to app_root directory" do
