@@ -14,25 +14,11 @@ module Discharger
             if system_quiet("which corepack")
               system! "corepack enable"
 
-              package_json_path = File.join(app_root, "package.json")
-              if File.exist?(package_json_path)
-                begin
-                  require "json"
-                  package_json = JSON.parse(File.read(package_json_path))
-
-                  if package_json["packageManager"]&.start_with?("yarn@")
-                    yarn_spec = package_json["packageManager"].split("+").first
-                    log "Using #{yarn_spec} from package.json"
-                    system! "corepack use #{yarn_spec}"
-                  else
-                    system! "corepack use yarn@stable"
-                  end
-                rescue JSON::ParserError => e
-                  log "Warning: Could not parse package.json: #{e.message}"
-                  system! "corepack use yarn@stable"
-                end
+              if (yarn_spec = package_manager_yarn_spec)
+                log "Using #{yarn_spec} from package.json"
+                system! "corepack install"
               else
-                system! "corepack use yarn@stable"
+                system! "corepack install -g yarn@stable"
               end
             end
 
@@ -58,6 +44,17 @@ module Discharger
 
         def description
           "Install JavaScript dependencies"
+        end
+
+        private
+
+        def package_manager_yarn_spec
+          require "json"
+          package_manager = JSON.parse(File.read(File.join(app_root, "package.json")))["packageManager"]
+          package_manager.split("+").first if package_manager&.start_with?("yarn@")
+        rescue JSON::ParserError => e
+          log "Warning: Could not parse package.json: #{e.message}"
+          nil
         end
       end
     end

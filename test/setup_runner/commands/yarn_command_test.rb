@@ -50,8 +50,37 @@ class YarnCommandTest < ActiveSupport::TestCase
     @command.execute
 
     assert_includes commands_run, "corepack enable"
-    assert_includes commands_run, "corepack use yarn@stable"
+    assert_includes commands_run, "corepack install -g yarn@stable"
     assert_includes commands_run, "yarn install"
+  end
+
+  test "execute installs the packageManager yarn without rewriting package.json" do
+    package_json = '{"name": "test-app", "packageManager": "yarn@4.9.2+sha224.abc"}'
+    create_file("package.json", package_json)
+    create_file("yarn.lock", "# yarn lockfile v1")
+
+    commands_run = []
+    @command.define_singleton_method(:system_quiet) { |cmd| cmd == "which corepack" }
+    @command.define_singleton_method(:system!) { |*args| commands_run << args.join(" ") }
+
+    @command.execute
+
+    assert_includes commands_run, "corepack install"
+    refute commands_run.any? { |cmd| cmd.start_with?("corepack use") }, commands_run.inspect
+    assert_equal package_json, File.read(File.join(@test_dir, "package.json"))
+  end
+
+  test "execute falls back to a global stable yarn when package.json is unparsable" do
+    create_file("package.json", "{not json")
+    create_file("yarn.lock", "# yarn lockfile v1")
+
+    commands_run = []
+    @command.define_singleton_method(:system_quiet) { |cmd| cmd == "which corepack" }
+    @command.define_singleton_method(:system!) { |*args| commands_run << args.join(" ") }
+
+    @command.execute
+
+    assert_includes commands_run, "corepack install -g yarn@stable"
   end
 
   test "execute skips yarn install when yarn check succeeds" do
@@ -71,7 +100,7 @@ class YarnCommandTest < ActiveSupport::TestCase
     @command.execute
 
     assert_includes commands_run, "corepack enable"
-    assert_includes commands_run, "corepack use yarn@stable"
+    assert_includes commands_run, "corepack install -g yarn@stable"
     refute_includes commands_run, "yarn install"
   end
 
