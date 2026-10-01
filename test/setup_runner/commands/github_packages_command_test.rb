@@ -46,7 +46,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"})
     @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    @command.define_singleton_method(:source_confirms_token?) { |_user, _token| true }
+    @command.define_singleton_method(:source_accepts_token?) { |_user, _token| true }
 
     @command.execute
 
@@ -94,7 +94,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       command: command)
     stored = []
     command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    command.define_singleton_method(:source_confirms_token?) { |_user, _token| false }
+    command.define_singleton_method(:source_accepts_token?) { |_user, _token| false }
 
     command.execute
 
@@ -111,7 +111,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
       command: command)
     command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
-    command.define_singleton_method(:source_confirms_token?) { |_user, _token| true }
+    command.define_singleton_method(:source_accepts_token?) { |_user, _token| true }
 
     command.execute
 

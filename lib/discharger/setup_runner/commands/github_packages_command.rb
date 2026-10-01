@@ -61,7 +61,7 @@ module Discharger
             return
           end
 
-          unless source_confirms_token?(username, token)
+          unless source_accepts_token?(username, token)
             log "Leaving bundler credentials for #{source} alone: it did not accept the gh token. The token " \
               "may lack the read:packages scope — run `gh auth refresh -s read:packages` and rerun setup."
             return
@@ -116,11 +116,7 @@ module Discharger
           raise "bundle config set --local #{source} failed: #{stderr}" unless status.success?
         end
 
-        # Probes the source's compact index with the gh token. Only a 2xx
-        # answer earns a bundler config entry; a 404, 500, redirect or
-        # network error leaves credentials alone, matching the bin/setup
-        # template's first pass.
-        def source_confirms_token?(username, token)
+        def source_accepts_token?(username, token)
           require "net/http"
           require "uri"
           uri = URI.join("#{source.chomp("/")}/", "versions")
