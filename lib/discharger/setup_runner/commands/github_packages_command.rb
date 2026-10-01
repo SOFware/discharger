@@ -61,8 +61,8 @@ module Discharger
             return
           end
 
-          unless credentials_valid?(username, token)
-            log "#{source} rejected the gh token, so bundler credentials were left alone. The token " \
+          unless source_accepts_token?(username, token)
+            log "Leaving bundler credentials for #{source} alone: it did not accept the gh token. The token " \
               "may lack the read:packages scope — run `gh auth refresh -s read:packages` and rerun setup."
             return
           end
@@ -116,10 +116,7 @@ module Discharger
           raise "bundle config set --local #{source} failed: #{stderr}" unless status.success?
         end
 
-        # Probes the source's compact index with the stored credentials.
-        # Only a definite 401/403 counts as invalid — network trouble must
-        # not fail setup over an unverifiable token.
-        def credentials_valid?(username, token)
+        def source_accepts_token?(username, token)
           require "net/http"
           require "uri"
           uri = URI.join("#{source.chomp("/")}/", "versions")
@@ -129,10 +126,10 @@ module Discharger
             request.basic_auth(username, token)
             http.request(request)
           end
-          !%w[401 403].include?(response.code)
+          response.is_a?(Net::HTTPSuccess)
         rescue => e
           logger&.debug("Could not verify GitHub Packages credentials: #{e.message}")
-          true
+          false
         end
       end
     end

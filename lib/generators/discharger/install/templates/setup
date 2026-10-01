@@ -26,7 +26,7 @@ unless ENV["DISCHARGER_SETUP_BUNDLED"]
     username = `gh api user --jq .login 2>/dev/null`.strip
     token = `gh auth token 2>/dev/null`.strip
     return if username.empty? || token.empty?
-    unless source_confirms_token?(source, username, token)
+    unless source_accepts_token?(source, username, token)
       warn "Leaving bundler credentials for #{source} alone: it did not accept the gh token (gh auth refresh -s read:packages)"
       return
     end
@@ -34,7 +34,7 @@ unless ENV["DISCHARGER_SETUP_BUNDLED"]
     system("bundle", "config", "set", "--local", source, "#{username}:#{token}", out: File::NULL, err: File::NULL)
   end
 
-  def source_confirms_token?(source, username, token)
+  def source_accepts_token?(source, username, token)
     require "net/http"
     uri = URI.join("#{source.chomp("/")}/", "versions")
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: 5, read_timeout: 10) do |http|
@@ -42,7 +42,7 @@ unless ENV["DISCHARGER_SETUP_BUNDLED"]
       request.basic_auth(username, token)
       http.request(request)
     end
-    !%w[401 403].include?(response.code)
+    response.is_a?(Net::HTTPSuccess)
   rescue
     false
   end

@@ -71,6 +71,26 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_match(/gh auth refresh -s read:packages/, stderr)
   end
 
+  test "generated setup leaves bundler credentials alone when the source answers 404" do
+    log, stderr = with_stub_registry("404 Not Found") do |source|
+      run_generated_setup_raw(bundle_check_status: 1, source: source)
+    end
+
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
+    assert_match(/Leaving bundler credentials/, stderr)
+  end
+
+  test "generated setup leaves bundler credentials alone when the source answers 500" do
+    log, stderr = with_stub_registry("500 Internal Server Error") do |source|
+      run_generated_setup_raw(bundle_check_status: 1, source: source)
+    end
+
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
+    assert_match(/Leaving bundler credentials/, stderr)
+  end
+
   test "generated setup leaves bundler credentials alone when the source is unreachable" do
     log = run_generated_setup(bundle_check_status: 1, source: unreachable_registry)
 
