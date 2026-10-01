@@ -42,7 +42,7 @@ unless ENV["DISCHARGER_SETUP_BUNDLED"]
       request.basic_auth(username, token)
       http.request(request)
     end
-    !%w[401 403].include?(response.code)
+    response.is_a?(Net::HTTPSuccess)
   rescue
     false
   end

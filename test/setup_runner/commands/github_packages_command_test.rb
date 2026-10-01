@@ -46,7 +46,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"})
     @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    @command.define_singleton_method(:credentials_valid?) { |_user, _token| true }
+    @command.define_singleton_method(:source_confirms_token?) { |_user, _token| true }
 
     @command.execute
 
@@ -94,7 +94,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       command: command)
     stored = []
     command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    command.define_singleton_method(:credentials_valid?) { |_user, _token| false }
+    command.define_singleton_method(:source_confirms_token?) { |_user, _token| false }
 
     command.execute
 
@@ -111,7 +111,7 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
       command: command)
     command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
-    command.define_singleton_method(:credentials_valid?) { |_user, _token| true }
+    command.define_singleton_method(:source_confirms_token?) { |_user, _token| true }
 
     command.execute
 
@@ -144,28 +144,51 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
       command.execute
     end
 
+    assert_empty @stored
     assert_match(/read:packages/, io.string)
   end
 
-  test "execute reports success when the source accepts the credential probe" do
+  test "execute stores credentials when the source accepts the credential probe" do
     io = StringIO.new
     with_stub_registry("200 OK") do |source|
       command = probing_command(io, source)
       command.execute
     end
 
+    assert_equal [["octocat", "gho_secret"]], @stored
     assert_match(/Configured bundler credentials/, io.string)
     refute_match(/read:packages/, io.string)
   end
 
-  test "execute treats an unreachable source as unverifiable, not invalid" do
+  test "execute leaves bundler credentials alone when the source answers 404" do
+    io = StringIO.new
+    with_stub_registry("404 Not Found") do |source|
+      probing_command(io, source).execute
+    end
+
+    assert_empty @stored
+    assert_match(/Leaving bundler credentials/, io.string)
+  end
+
+  test "execute leaves bundler credentials alone when the source answers 500" do
+    io = StringIO.new
+    with_stub_registry("500 Internal Server Error") do |source|
+      probing_command(io, source).execute
+    end
+
+    assert_empty @stored
+    assert_match(/Leaving bundler credentials/, io.string)
+  end
+
+  test "execute leaves bundler credentials alone when the source is unreachable" do
     io = StringIO.new
     command = probing_command(io, unreachable_registry)
 
     command.execute
 
-    assert_match(/Configured bundler credentials/, io.string)
-    refute_match(/read:packages/, io.string)
+    assert_empty @stored
+    assert_match(/Leaving bundler credentials/, io.string)
+    refute_match(/Configured bundler credentials/, io.string)
   end
 
   test "unscheduled_warning names the source when nothing schedules the command" do
@@ -240,7 +263,8 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
       command: command)
-    command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
+    stored = @stored = []
+    command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
     command
   end
 
