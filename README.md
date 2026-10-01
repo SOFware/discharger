@@ -239,6 +239,16 @@ release that changed the template, regenerate the script without touching
 $ bin/rails generate discharger:install --setup-only --force
 ```
 
+To catch drift in CI, run the check. It exits non-zero when `bin/setup` is missing
+or differs from the installed gem's template, and names the command above:
+
+```bash
+$ bin/rails discharger:setup:check
+```
+
+A script generated elsewhere takes its path as the task argument:
+`discharger:setup:check[scripts/setup]`.
+
 ### Configuration
 
 The setup process is configured through `config/setup.yml`. Here's an example configuration:

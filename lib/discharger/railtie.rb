@@ -9,6 +9,10 @@ module Discharger
       end
     end
 
+    rake_tasks do
+      load File.expand_path("../tasks/discharger.rake", __dir__)
+    end
+
     config.after_initialize do |app|
       if Rails.env.development? && Discharger.slack_token.nil?
         warn "Your application Discharger.slack_token must be set."
