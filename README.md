@@ -113,9 +113,7 @@ Runbook: Run \`rake data:cleanup\` after deploy"
 
 `rake release:prepare` finalizes the runbook alongside the changelog, so the release tag
 records exactly which steps that version needs. Discharger posts the checklist to Slack as
-a reply in the deploy thread — both on the stage build (`rake release:build` /
-`rake release:stage`, threaded under "Building…") and after the production release
-(threaded under the release announcement, right after the changelog):
+a reply in the release thread, right after the changelog:
 
 ```
 *Post-release runbook for 1.2.3* — 2 steps
@@ -123,9 +121,6 @@ a reply in the deploy thread — both on the stage build (`rake release:build` /
 • Run `rake data:cleanup` (abc1234)
 • Re-index search documents (def5678)
 ```
-
-Staging shows the steps as a preview so the team sees what production will need before it
-happens; the production thread repeats them when the release actually lands.
 
 When a release needs no follow-up, the thread says so explicitly rather than staying
 silent, so nobody has to wonder whether the check was skipped:
@@ -139,63 +134,49 @@ Leave `runbook_file` unset and Discharger posts nothing extra. See the
 [Reissue runbook documentation](https://github.com/SOFware/reissue#post-release-runbook)
 for how items are collected and merged.
 
-## Available Tasks
+## Release Flow
 
-The gem creates several Rake tasks for managing your deployment workflow:
+Discharger assumes one long-lived branch, `main` by default. CI deploys every push to that
+branch to staging, and production deploys from `v*` tags. There is no staging branch and no
+production branch to keep in sync.
 
 ```bash
 $ rake -T release
-rake release                            # ---------- STEP 3 ----------
-rake release:build                      # Release the current version to stage
+rake release                            # ---------- STEP 2 ----------
 rake release:config                     # Echo the configuration settings
 rake release:prepare                    # ---------- STEP 1 ----------
 rake release:slack[text,channel,emoji]  # Send a message to Slack
-rake release:stage                      # ---------- STEP 2 ----------
 ```
 
-### Workflow Steps
+1. **Prepare** (`rake release:prepare`): Cut a finish branch from `main`, finalize the
+   changelog and runbook, and open a PR back to `main`. Merging that PR puts the finalized
+   release on staging.
+2. **Release** (`rake release`): Tag the release commit on `main`, push the tag, announce
+   the release in Slack, then open the PR that bumps `main` to the next version.
 
-1. **Prepare** (`rake release:prepare`): Create a new branch to prepare the release, update the changelog, and bump the version
-2. **Stage** (`rake release:stage`): Update the staging branch and create a PR to production
-3. **Release** (`rake release`): Release the current version to production by tagging and pushing to the production branch
+`rake release` tags the newest commit that changed the current version's dated changelog
+section, so work merged after finalizing (or re-finalizing for a hotfix) is left out.
+Production ships the tagged commit, which can be older than what staging last ran.
 
-### Building with a Working Branch
-
-To release a specific working branch to stage instead of the default branch, use the `DISCHARGER_BUILD_BRANCH` environment variable:
-
-```bash
-DISCHARGER_BUILD_BRANCH=your-feature-branch rake build
-```
-
-This will deploy your working branch to the staging environment.
-
-#### Configuring Branch Names
-
-You can configure the branch names in your Rakefile when setting up the discharger task:
+### Configuring the Branch
 
 ```ruby
-require "discharger"
-
-Discharger::Task.new do |task|
+Discharger::Task.create do |task|
   task.app_name = "MyApp"
-  task.working_branch = ENV.fetch("WORKING_BRANCH", "develop")
-  task.staging_branch = ENV.fetch("STAGING_BRANCH", "stage")
-  task.production_branch = ENV.fetch("PRODUCTION_BRANCH", "main")
+  task.working_branch = ENV.fetch("WORKING_BRANCH", "main")
   # ... other configuration
 end
 ```
 
-This allows you to use environment variables to override the default branch names, or set project-specific defaults. The `DISCHARGER_BUILD_BRANCH` environment variable (shown above) provides a runtime override specifically for the build task.
+### Upgrading to 0.5.0
 
-### Auto-deploy Staging
+Before bumping the gem, CI must deploy every push to the working branch to staging and
+every `v*` tag to production. Then:
 
-For projects whose CI deploys the working branch to staging on every merge, set `task.auto_deploy_staging = true` and skip `rake release:stage`. Once the finalize PR merges, `rake release`:
-
-1. Tags the newest commit that changed the current version's dated changelog section, so work merged after finalizing (or re-finalizing for a hotfix) is left out.
-2. Pushes the tag. Production deploys from `v*` tags.
-3. Merges the tag into `production_branch` so it tracks production. If that push is rejected, the release still completes with a warning.
-
-Production ships the tagged commit, which can be older than what staging last ran.
+- Remove `staging_branch`, `production_branch`, `auto_deploy_staging` and `description`
+  from the Rakefile. In 0.5.0 they warn and do nothing; 0.6 removes them.
+- `working_branch` now defaults to `main`. Set it if the app releases from another branch.
+- `release:stage` and `release:build` are gone; nothing replaces them.
 
 ## Development Setup Automation
 
