@@ -496,9 +496,10 @@ class DischargerReleasePreconditionTest < Minitest::Test
   def test_ensure_clean_worktree_aborts_on_dirty_checkout
     stub_capture3(" M CHANGELOG.md\n", "", true)
 
-    assert_raises(SystemExit) do
+    error = assert_raises(SystemExit) do
       capture_io { @task.ensure_clean_worktree! }
     end
+    assert_includes error.message, "before releasing"
   end
 
   def test_ensure_branch_not_ahead_passes_when_count_is_zero

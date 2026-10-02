@@ -152,7 +152,7 @@ module Discharger
       stdout, _, status = Open3.capture3("git", "status", "--porcelain")
       return true if status.success? && stdout.empty?
 
-      abort "Working tree has uncommitted changes. Commit or stash them before running rake #{name}:prepare."
+      abort "Working tree has uncommitted changes. Commit or stash them before releasing."
     end
 
     def validate_pr_label!
