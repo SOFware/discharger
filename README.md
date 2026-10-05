@@ -205,8 +205,8 @@ creates every missing counterpart of `config/**/*.example` and `.env.example`, s
 app whose boot needs `.env` or `config/database.yml` gets them without copying
 them in `pre_steps`.
 
-Each step prints its elapsed time when it finishes, and the closing line reports the
-total, so a slow setup shows which step to look at.
+Each pre_step and step prints its elapsed time when it finishes, and the closing line
+reports the total, so a slow setup shows which step to look at.
 
 ### Keeping bin/setup Generated
 
@@ -309,7 +309,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `asdf` - Setup version management with asdf
 - `git` - Configure git settings
 - `github_packages` - Check the GitHub CLI token against a private GitHub Packages gem source; the generated `bin/setup` stores the credentials (requires a `github_packages.source` config entry)
-- `bundler` - Install Ruby gems
+- `bundler` - Install Ruby gems; a check under the generated `bin/setup`, whose first pass already installed the bundle
 - `yarn` - Install JavaScript packages
 - `config` - Copy Procfile.dev to Procfile and any example config file still missing
 - `docker` - Setup Docker containers

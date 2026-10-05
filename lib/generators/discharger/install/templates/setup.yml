@@ -52,7 +52,7 @@ steps:
   - git
   # Uncomment with the github_packages block above to check the token.
   # - github_packages
-  - bundler
+  - bundler  # a check; bin/setup already installed the bundle
   - yarn
   - config
   - docker
