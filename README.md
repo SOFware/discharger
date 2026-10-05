@@ -195,7 +195,8 @@ You can rerun it whenever your environment drifts. Every run drops and rebuilds 
 It works on a fresh clone with no gems installed. The generated script first runs a
 standard-library-only pass that stores bundler credentials for a configured
 `github_packages` source (from your GitHub CLI login, only once the source
-accepts that token), installs the bundle, and then
+accepts that token; gh calls time out after `github_packages.gh_timeout` seconds,
+15 by default, or `DISCHARGER_GH_TIMEOUT`), installs the bundle, and then
 re-execs itself under `bundle exec` so default gems such as psych never clash with
 `Gemfile.lock`. The `DISCHARGER_SETUP_BUNDLED` environment variable marks the second
 pass; the `github_packages` step later verifies the stored credentials and warns when
@@ -307,7 +308,7 @@ The `steps` array specifies which built-in setup commands to run. Available comm
 - `brew` - Install Homebrew dependencies
 - `asdf` - Setup version management with asdf
 - `git` - Configure git settings
-- `github_packages` - Store bundler credentials for a private GitHub Packages gem source using the GitHub CLI (run before `bundler`; requires a `github_packages.source` config entry)
+- `github_packages` - Check the GitHub CLI token against a private GitHub Packages gem source; the generated `bin/setup` stores the credentials (requires a `github_packages.source` config entry)
 - `bundler` - Install Ruby gems
 - `yarn` - Install JavaScript packages
 - `config` - Copy Procfile.dev to Procfile and any example config file still missing

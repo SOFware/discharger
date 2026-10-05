@@ -198,4 +198,13 @@ class RedisConfigTest < ActiveSupport::TestCase
     assert_equal "redis-app", config.name  # unchanged
     assert_equal "latest", config.version   # unchanged
   end
+
+  test "github_packages reads gh_timeout from the hash" do
+    config = Discharger::SetupRunner::GithubPackagesConfig.new
+    assert_nil config.gh_timeout
+
+    config.from_hash("source" => "https://rubygems.pkg.github.com/example", "gh_timeout" => 5)
+
+    assert_equal 5, config.gh_timeout
+  end
 end

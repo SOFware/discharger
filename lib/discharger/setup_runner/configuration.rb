@@ -61,14 +61,16 @@ module Discharger
     end
 
     class GithubPackagesConfig
-      attr_accessor :source
+      attr_accessor :source, :gh_timeout
 
       def initialize
         @source = nil
+        @gh_timeout = nil
       end
 
       def from_hash(hash)
         @source = hash["source"] if hash["source"]
+        @gh_timeout = hash["gh_timeout"] if hash["gh_timeout"]
       end
     end
 

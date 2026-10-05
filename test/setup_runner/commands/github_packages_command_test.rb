@@ -8,7 +8,6 @@ require "socket"
 
 class GithubPackagesCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
-  include Capture3Stubbing
   include StubRegistry
 
   SOURCE = "https://rubygems.pkg.github.com/example"
@@ -19,12 +18,12 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     @config.github_packages = Discharger::SetupRunner::GithubPackagesConfig.new.tap do |g|
       g.source = SOURCE
     end
-    @logger = Logger.new(StringIO.new)
-    @command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, @logger)
+    @io = StringIO.new
+    @command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, Logger.new(@io))
   end
 
   test "description returns correct text" do
-    assert_equal "Configure GitHub Packages credentials", @command.description
+    assert_equal "Check GitHub Packages credentials", @command.description
   end
 
   test "can_execute? returns true when a source is configured" do
@@ -41,199 +40,156 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
     refute @command.can_execute?
   end
 
-  test "execute stores and verifies credentials when gh is installed and authenticated" do
-    stored = []
+  test "execute reports when the source accepts the gh token" do
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"})
-    @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    @command.define_singleton_method(:source_accepts_token?) { |_user, _token| true }
+    probed = stub_probe(true)
 
     @command.execute
 
-    assert_equal [["octocat", "gho_secret"]], stored
+    assert_equal [["octocat", "gho_secret"]], probed
+    assert_match(/accepts the gh token/, @io.string)
   end
 
-  test "execute skips without storing credentials when gh is not installed" do
-    stored = []
+  test "execute warns about read:packages when the source rejects the token" do
+    stub_shell(gh_installed: true, authenticated: true,
+      gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"})
+    stub_probe(false)
+
+    @command.execute
+
+    assert_match(/did not accept the gh token/, @io.string)
+    assert_match(/gh auth refresh -s read:packages/, @io.string)
+  end
+
+  test "execute skips the probe when gh is not installed" do
     stub_shell(gh_installed: false, authenticated: false, gh_outputs: {})
-    @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
+    probed = stub_probe(true)
 
     @command.execute
 
-    assert_empty stored
+    assert_empty probed
+    assert_match(/gh\) not found/, @io.string)
   end
 
-  test "execute skips without storing credentials when not authenticated and login fails" do
-    stored = []
+  test "execute skips the probe when not authenticated and login fails" do
     stub_shell(gh_installed: true, authenticated: false, gh_outputs: {})
     @command.define_singleton_method(:login) { false }
-    @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
+    probed = stub_probe(true)
 
     @command.execute
 
-    assert_empty stored
+    assert_empty probed
+    assert_match(/Not logged in/, @io.string)
   end
 
-  test "execute skips without storing credentials when gh returns no token" do
-    stored = []
+  test "execute skips the probe when gh returns no token" do
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => nil})
-    @command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
+    probed = stub_probe(true)
 
     @command.execute
 
-    assert_empty stored
-  end
-
-  test "execute leaves bundler credentials alone and warns about read:packages when the source rejects the token" do
-    io = StringIO.new
-    logger = Logger.new(io)
-    command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, logger)
-    stub_shell(gh_installed: true, authenticated: true,
-      gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
-      command: command)
-    stored = []
-    command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
-    command.define_singleton_method(:source_accepts_token?) { |_user, _token| false }
-
-    command.execute
-
-    assert_empty stored
-    assert_match(/read:packages/, io.string)
-    assert_match(/gh auth refresh/, io.string)
+    assert_empty probed
+    assert_match(/Could not read GitHub credentials/, @io.string)
   end
 
   test "execute never logs the token" do
-    io = StringIO.new
-    logger = Logger.new(io)
-    command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, logger)
     stub_shell(gh_installed: true, authenticated: true,
-      gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
-      command: command)
-    command.define_singleton_method(:store_bundler_credentials) { |_user, _token| }
-    command.define_singleton_method(:source_accepts_token?) { |_user, _token| true }
+      gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"})
+    stub_probe(true)
 
-    command.execute
+    @command.execute
 
-    refute_match(/gho_secret/, io.string)
-  end
-
-  test "store_bundler_credentials writes the credentials to the local bundler config" do
-    calls = stub_capture3(success: true) do
-      @command.send(:store_bundler_credentials, "octocat", "gho_secret")
-    end
-
-    assert_equal [["bundle", "config", "set", "--local", SOURCE, "octocat:gho_secret"]], calls
-  end
-
-  test "store_bundler_credentials raises without leaking the token when bundle config fails" do
-    error = assert_raises(RuntimeError) do
-      stub_capture3(success: false, stderr: "could not write config") do
-        @command.send(:store_bundler_credentials, "octocat", "gho_secret")
-      end
-    end
-
-    assert_match(/could not write config/, error.message)
-    refute_match(/gho_secret/, error.message)
+    refute_match(/gho_secret/, @io.string)
   end
 
   test "execute warns when the source responds 401 to the credential probe" do
-    io = StringIO.new
-    with_stub_registry("401 Unauthorized") do |source|
-      command = probing_command(io, source)
-      command.execute
+    with_stub_registry("401 Unauthorized") { |source| probing_command(source).execute }
+
+    assert_match(/read:packages/, @io.string)
+  end
+
+  test "execute reports acceptance when the source answers 200" do
+    with_stub_registry("200 OK") { |source| probing_command(source).execute }
+
+    assert_match(/accepts the gh token/, @io.string)
+    refute_match(/read:packages/, @io.string)
+  end
+
+  test "execute treats a 404 as rejection" do
+    with_stub_registry("404 Not Found") { |source| probing_command(source).execute }
+
+    assert_match(/did not accept the gh token/, @io.string)
+  end
+
+  test "execute treats a 500 as rejection" do
+    with_stub_registry("500 Internal Server Error") { |source| probing_command(source).execute }
+
+    assert_match(/did not accept the gh token/, @io.string)
+  end
+
+  test "execute treats an unreachable source as rejection" do
+    probing_command(unreachable_registry).execute
+
+    assert_match(/did not accept the gh token/, @io.string)
+    refute_match(/accepts the gh token/, @io.string)
+  end
+
+  test "gh returns the command's output when the CLI answers" do
+    with_fake_gh("echo octocat") do
+      assert_equal "octocat", @command.send(:gh, "api", "user", "--jq", ".login")
+    end
+  end
+
+  test "gh returns nil when the CLI fails" do
+    with_fake_gh("exit 1") do
+      assert_nil @command.send(:gh, "auth", "token")
+    end
+  end
+
+  test "gh gives up with a message when the CLI stalls" do
+    ENV["DISCHARGER_GH_TIMEOUT"] = "0.2"
+
+    with_fake_gh("sleep 5; echo late") do
+      assert_nil @command.send(:gh, "auth", "token")
     end
 
-    assert_empty @stored
-    assert_match(/read:packages/, io.string)
-  end
-
-  test "execute stores credentials when the source accepts the credential probe" do
-    io = StringIO.new
-    with_stub_registry("200 OK") do |source|
-      command = probing_command(io, source)
-      command.execute
-    end
-
-    assert_equal [["octocat", "gho_secret"]], @stored
-    assert_match(/Configured bundler credentials/, io.string)
-    refute_match(/read:packages/, io.string)
-  end
-
-  test "execute leaves bundler credentials alone when the source answers 404" do
-    io = StringIO.new
-    with_stub_registry("404 Not Found") do |source|
-      probing_command(io, source).execute
-    end
-
-    assert_empty @stored
-    assert_match(/Leaving bundler credentials/, io.string)
-  end
-
-  test "execute leaves bundler credentials alone when the source answers 500" do
-    io = StringIO.new
-    with_stub_registry("500 Internal Server Error") do |source|
-      probing_command(io, source).execute
-    end
-
-    assert_empty @stored
-    assert_match(/Leaving bundler credentials/, io.string)
-  end
-
-  test "execute leaves bundler credentials alone when the source is unreachable" do
-    io = StringIO.new
-    command = probing_command(io, unreachable_registry)
-
-    command.execute
-
-    assert_empty @stored
-    assert_match(/Leaving bundler credentials/, io.string)
-    refute_match(/Configured bundler credentials/, io.string)
-  end
-
-  test "unscheduled_warning names the source when nothing schedules the command" do
-    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
-
-    assert_match(/missing from steps/, message)
-    assert_includes message, SOURCE
-  end
-
-  test "unscheduled_warning returns nil without a github_packages accessor" do
-    duck = Struct.new(:steps, :custom_steps).new(%w[env], [])
-
-    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(duck)
-  end
-
-  test "unscheduled_warning returns nil when a custom step references the source" do
-    @config.custom_steps = [{"description" => "creds", "command" => "bundle config set --local #{SOURCE} user:token"}]
-
-    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
-  end
-
-  test "unscheduled_warning ignores source references in steps whose condition is false" do
-    @config.custom_steps = [{
-      "description" => "creds",
-      "command" => "bundle config set --local #{SOURCE} user:token",
-      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
-    }]
-
-    message = Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
-
-    refute_nil message, "a step skipped by its condition stores nothing this run"
-    assert_match(/missing from steps/, message)
-  end
-
-  test "unscheduled_warning stays quiet when the referencing step's condition is true" do
-    ENV["DISCHARGER_TEST_CREDS"] = "true"
-    @config.custom_steps = [{
-      "description" => "creds",
-      "command" => "bundle config set --local #{SOURCE} user:token",
-      "condition" => "ENV['DISCHARGER_TEST_CREDS'] == 'true'"
-    }]
-
-    assert_nil Discharger::SetupRunner::Commands::GithubPackagesCommand.unscheduled_warning(@config)
+    assert_match(/gh auth token did not answer within 0s/, @io.string)
   ensure
-    ENV.delete("DISCHARGER_TEST_CREDS")
+    ENV.delete("DISCHARGER_GH_TIMEOUT")
+  end
+
+  test "authenticated? treats a stalled gh auth status as not logged in" do
+    io = StringIO.new
+    command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(@config, @test_dir, Logger.new(io))
+    ENV["DISCHARGER_GH_TIMEOUT"] = "0.2"
+
+    with_fake_gh("sleep 5") do
+      refute command.send(:authenticated?)
+    end
+
+    assert_match(/gh auth status did not answer within 0s/, io.string)
+  ensure
+    ENV.delete("DISCHARGER_GH_TIMEOUT")
+  end
+
+  test "gh_timeout defaults to 15, takes setup.yml's value, and lets the env var win" do
+    assert_equal 15.0, @command.send(:gh_timeout)
+
+    @config.github_packages.gh_timeout = 5
+    assert_equal 5.0, @command.send(:gh_timeout)
+
+    ENV["DISCHARGER_GH_TIMEOUT"] = "0.5"
+    assert_equal 0.5, @command.send(:gh_timeout)
+  ensure
+    ENV.delete("DISCHARGER_GH_TIMEOUT")
+  end
+
+  test "gh returns nil when the CLI is not installed" do
+    with_fake_gh(nil) do
+      assert_nil @command.send(:gh, "auth", "token")
+    end
   end
 
   test "command is registered as github_packages" do
@@ -248,34 +204,53 @@ class GithubPackagesCommandTest < ActiveSupport::TestCase
 
     assert_includes names, "github_packages"
     assert_includes names, "bundler"
-    assert_operator names.index("github_packages"), :<, names.index("bundler"),
-      "credentials must be stored before bundler installs from the private source"
+    assert_operator names.index("github_packages"), :<, names.index("bundler")
   end
 
   private
 
-  # A command with real credential probing against the given source;
-  # everything before the probe is stubbed to succeed.
-  def probing_command(io, source)
+  # Records the credentials each probe receives and answers with `accepted`.
+  def stub_probe(accepted, command: @command)
+    probed = []
+    command.define_singleton_method(:source_accepts_token?) do |user, token|
+      probed << [user, token]
+      accepted
+    end
+    probed
+  end
+
+  # Puts a fake gh (or none, for nil) first on PATH for the block.
+  def with_fake_gh(body)
+    bin = File.join(@test_dir, "fake-bin")
+    FileUtils.mkdir_p(bin)
+    if body
+      File.write(File.join(bin, "gh"), "#!/bin/sh\n#{body}\n")
+      File.chmod(0o755, File.join(bin, "gh"))
+    end
+    original_path = ENV["PATH"]
+    ENV["PATH"] = body ? "#{bin}:#{original_path}" : bin
+    yield
+  ensure
+    ENV["PATH"] = original_path
+  end
+
+  # A command that really probes the given source; everything before the
+  # probe is stubbed to succeed.
+  def probing_command(source)
     config = Discharger::SetupRunner::Configuration.new
     config.github_packages = Discharger::SetupRunner::GithubPackagesConfig.new.tap { |g| g.source = source }
-    command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(config, @test_dir, Logger.new(io))
+    command = Discharger::SetupRunner::Commands::GithubPackagesCommand.new(config, @test_dir, Logger.new(@io))
     stub_shell(gh_installed: true, authenticated: true,
       gh_outputs: {["api", "user", "--jq", ".login"] => "octocat", ["auth", "token"] => "gho_secret"},
       command: command)
-    stored = @stored = []
-    command.define_singleton_method(:store_bundler_credentials) { |user, token| stored << [user, token] }
     command
   end
 
   def stub_shell(gh_installed:, authenticated:, gh_outputs:, command: @command)
-    command.define_singleton_method(:system_quiet) do |*args|
-      case args.join(" ")
-      when "which gh" then gh_installed
-      when "gh auth status" then authenticated
-      else false
-      end
+    command.define_singleton_method(:system_quiet) { |*args| args.join(" ") == "which gh" && gh_installed }
+    status_output = authenticated ? "" : nil
+    command.define_singleton_method(:gh) do |*args|
+      (args == ["auth", "status"]) ? status_output : gh_outputs[args]
     end
-    command.define_singleton_method(:gh) { |*args| gh_outputs[args] }
   end
 end

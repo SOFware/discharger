@@ -91,6 +91,22 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_match(/Leaving bundler credentials/, stderr)
   end
 
+  test "generated setup gives up on gh when it stalls and still installs the bundle" do
+    log, stderr, status = run_generated_setup_raw(bundle_check_status: 1, gh_delay: 5, gh_timeout: 0.2)
+
+    assert status.success?, stderr
+    assert_match(/gh auth token did not answer within 0s/, stderr)
+    assert_empty log.grep(/\Abundle config set/)
+    assert_includes log, "bundle install"
+  end
+
+  test "generated setup reads the gh timeout from setup.yml" do
+    _log, stderr, status = run_generated_setup_raw(bundle_check_status: 1, gh_delay: 5, gh_timeout_config: 0.2)
+
+    assert status.success?, stderr
+    assert_match(/gh auth token did not answer within 0s/, stderr)
+  end
+
   test "generated setup leaves bundler credentials alone when the source is unreachable" do
     log = run_generated_setup(bundle_check_status: 1, source: unreachable_registry)
 
@@ -193,7 +209,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     log
   end
 
-  def run_generated_setup_raw(bundle_check_status:, bundle_install_status: 0, gh_auth_status: 0, source: "https://rubygems.pkg.github.com/example", from: destination_root, setup_yml: true)
+  def run_generated_setup_raw(bundle_check_status:, bundle_install_status: 0, gh_auth_status: 0, gh_delay: 0, gh_timeout: nil, gh_timeout_config: nil, source: "https://rubygems.pkg.github.com/example", from: destination_root, setup_yml: true)
     run_generator
     File.write(File.join(destination_root, "Gemfile"), "source 'https://rubygems.org'\n")
     if setup_yml
@@ -201,6 +217,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
         app_name: TestApp
         github_packages:
           source: "#{source}"
+          #{"gh_timeout: #{gh_timeout_config}" if gh_timeout_config}
       YAML
     else
       FileUtils.rm_f(File.join(destination_root, "config/setup.yml"))
@@ -219,12 +236,13 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     write_stub(stubs, "gh", <<~SH)
       case "$*" in
         "api user --jq .login") [ #{gh_auth_status} -eq 0 ] && echo octocat; exit #{gh_auth_status} ;;
-        "auth token") echo gh-test-token ;;
+        "auth token") sleep #{gh_delay}; echo gh-test-token ;;
       esac
       exit 0
     SH
 
     env = {"PATH" => "#{stubs}:#{ENV["PATH"]}", "STUB_LOG" => log_path}
+    env["DISCHARGER_GH_TIMEOUT"] = gh_timeout.to_s if gh_timeout
     _stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, File.join(destination_root, "bin/setup"), chdir: from)
     log = File.exist?(log_path) ? File.readlines(log_path, chomp: true) : []
     [log, stderr, status]

@@ -5,6 +5,7 @@ require_relative "base_command"
 module Discharger
   module SetupRunner
     module Commands
+      # bin/setup's first pass mirrors this; change them together.
       class BundlerCommand < BaseCommand
         def execute
           log "Installing dependencies"
