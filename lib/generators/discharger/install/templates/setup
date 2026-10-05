@@ -14,24 +14,45 @@ Dir.chdir(File.expand_path("..", __dir__))
 # under bundle exec before yaml loads, or a default psych clashes with Gemfile.lock.
 # Mirrors the github_packages and bundler steps, which re-run under bundle exec.
 unless ENV["DISCHARGER_SETUP_BUNDLED"]
+  # Mirrors GithubPackagesCommand and BundlerCommand in the gem; change them together.
   def store_github_packages_credentials
     require "yaml"
-    source = begin
-      YAML.safe_load_file("config/setup.yml")&.dig("github_packages", "source")
+    packages = begin
+      YAML.safe_load_file("config/setup.yml")&.dig("github_packages") || {}
     rescue SystemCallError, Psych::Exception
-      nil # reported by Discharger::Setup on the second pass
+      {} # reported by Discharger::Setup on the second pass
     end
+    source = packages["source"]
     return if source.to_s.empty?
 
-    username = `gh api user --jq .login 2>/dev/null`.strip
-    token = `gh auth token 2>/dev/null`.strip
-    return if username.empty? || token.empty?
+    timeout = Float(ENV.fetch("DISCHARGER_GH_TIMEOUT") { packages["gh_timeout"] || 15 })
+    username = gh("api", "user", "--jq", ".login", timeout: timeout)
+    token = gh("auth", "token", timeout: timeout)
+    return if username.to_s.empty? || token.to_s.empty?
     unless source_accepts_token?(source, username, token)
       warn "Leaving bundler credentials for #{source} alone: it did not accept the gh token (gh auth refresh -s read:packages)"
       return
     end
 
     system("bundle", "config", "set", "--local", source, "#{username}:#{token}", out: File::NULL, err: File::NULL)
+  end
+
+  def gh(*args, timeout:)
+    require "open3"
+    Open3.popen2("gh", *args, err: File::NULL) do |stdin, stdout, wait|
+      stdin.close
+      out = Thread.new { stdout.read }
+      if wait.join(timeout)
+        out.value.strip if wait.value.success?
+      else
+        Process.kill("KILL", wait.pid)
+        out.kill
+        warn "gh #{args.join(" ")} did not answer within #{timeout.to_i}s; continuing without credentials"
+        nil
+      end
+    end
+  rescue Errno::ENOENT
+    nil
   end
 
   def source_accepts_token?(source, username, token)

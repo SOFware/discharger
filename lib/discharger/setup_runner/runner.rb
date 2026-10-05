@@ -26,8 +26,6 @@ module Discharger
           puts Rainbow("=" * 50).blue
         end
 
-        warn_unscheduled_commands
-
         elapsed = Timing.measure do
           FileUtils.chdir app_root do
             execute_commands
@@ -79,18 +77,6 @@ module Discharger
 
       def commands
         @commands ||= command_factory.create_all_commands
-      end
-
-      # Checked at run time, after the customization block, so commands
-      # scheduled through add_command/insert_command_* count as scheduled.
-      def warn_unscheduled_commands
-        CommandRegistry.all.each do |klass|
-          next unless klass.respond_to?(:unscheduled_warning)
-          next if commands.any? { |command| command.is_a?(klass) }
-
-          message = klass.unscheduled_warning(config)
-          logger.warn message if message
-        end
       end
 
       def execute_commands

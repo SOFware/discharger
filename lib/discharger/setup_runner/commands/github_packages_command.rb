@@ -5,43 +5,10 @@ require_relative "base_command"
 module Discharger
   module SetupRunner
     module Commands
-      # Stores bundler credentials for a private GitHub Packages gem source
-      # using the GitHub CLI, so Gemfiles don't need embedded tokens. A token
-      # the source rejects is not stored, so it cannot shadow a working
-      # credential in the user's own bundler config. Credentials are written
-      # to the app's .bundle/config — keep .bundle gitignored. Run this step
-      # before "bundler" in setup.yml.
+      # Checks the gh token against the GitHub Packages source; bin/setup
+      # stored the credentials. The template's first pass mirrors this.
       class GithubPackagesCommand < BaseCommand
-        # A configured source with nothing scheduled to store its credentials
-        # is inert, and the only symptom is bundler failing against the
-        # private source. The Runner surfaces this before executing commands.
-        # Guarded for duck-typed configs passed to the public Runner API, and
-        # quiet when a custom step's command references the source (assumed
-        # to handle credentials itself).
-        def self.unscheduled_warning(config)
-          return unless config.respond_to?(:github_packages)
-
-          source = config.github_packages&.source
-          return if source.to_s.empty?
-          if config.respond_to?(:custom_steps) &&
-              config.custom_steps.any? { |step| step_handles_source?(step, source) }
-            return
-          end
-
-          "github_packages is configured but missing from steps; " \
-            "credentials will not be stored and bundler may fail for #{source}"
-        end
-
-        # A referencing step only counts as handling credentials when it will
-        # actually run: CustomCommand skips itself when its condition is
-        # false, storing nothing on this run.
-        def self.step_handles_source?(step, source)
-          return false unless step["command"].to_s.include?(source)
-
-          require_relative "../condition_evaluator"
-          ConditionEvaluator.evaluate(step["condition"])
-        end
-        private_class_method :step_handles_source?
+        GH_TIMEOUT_SECONDS = 15
 
         def execute
           unless gh_installed?
@@ -61,14 +28,12 @@ module Discharger
             return
           end
 
-          unless source_accepts_token?(username, token)
-            log "Leaving bundler credentials for #{source} alone: it did not accept the gh token. The token " \
-              "may lack the read:packages scope — run `gh auth refresh -s read:packages` and rerun setup."
-            return
+          if source_accepts_token?(username, token)
+            log "#{source} accepts the gh token"
+          else
+            log "#{source} did not accept the gh token. It may lack the read:packages scope — " \
+              "run `gh auth refresh -s read:packages` and rerun setup."
           end
-
-          store_bundler_credentials(username, token)
-          log "Configured bundler credentials for #{source}"
         end
 
         def can_execute?
@@ -76,7 +41,7 @@ module Discharger
         end
 
         def description
-          "Configure GitHub Packages credentials"
+          "Check GitHub Packages credentials"
         end
 
         protected
@@ -90,7 +55,7 @@ module Discharger
         end
 
         def authenticated?
-          system_quiet("gh auth status")
+          !gh("auth", "status").nil?
         end
 
         def login
@@ -102,18 +67,24 @@ module Discharger
 
         def gh(*args)
           require "open3"
-          stdout, _stderr, status = Open3.capture3("gh", *args)
-          status.success? ? stdout.chomp : nil
+          Open3.popen2("gh", *args, err: File::NULL) do |stdin, stdout, wait|
+            stdin.close
+            out = Thread.new { stdout.read }
+            if wait.join(gh_timeout)
+              out.value.chomp if wait.value.success?
+            else
+              Process.kill("KILL", wait.pid)
+              out.kill
+              log "gh #{args.join(" ")} did not answer within #{gh_timeout.to_i}s."
+              nil
+            end
+          end
+        rescue Errno::ENOENT
+          nil
         end
 
-        # Runs bundle config directly instead of through system! so the
-        # token never reaches the spinner display or the debug log.
-        def store_bundler_credentials(username, token)
-          require "open3"
-          _stdout, stderr, status = Open3.capture3(
-            "bundle", "config", "set", "--local", source, "#{username}:#{token}"
-          )
-          raise "bundle config set --local #{source} failed: #{stderr}" unless status.success?
+        def gh_timeout
+          Float(ENV.fetch("DISCHARGER_GH_TIMEOUT") { config.github_packages&.gh_timeout || GH_TIMEOUT_SECONDS })
         end
 
         def source_accepts_token?(username, token)

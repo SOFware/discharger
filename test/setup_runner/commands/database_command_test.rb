@@ -66,28 +66,6 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     assert spinner_calls.include?("Clearing logs and temp files")
   end
 
-  test "execute passes SEED_DEV_ENV when config.seed_env is true" do
-    @config.seed_env = true
-    capture3_calls = []
-
-    # Mock spinner
-    @command.define_singleton_method(:with_spinner) do |message, &block|
-      block.call
-    end
-
-    # Mock Open3.capture3 to track calls
-    Open3.define_singleton_method(:capture3) do |*args|
-      capture3_calls << args
-      ["", "", OpenStruct.new(success?: true)]
-    end
-
-    @command.execute
-
-    # Find the seed command call
-    seed_call = capture3_calls.find { |call| call.any? { |arg| arg.is_a?(String) && arg.include?("db:seed") } }
-    assert seed_call.first.is_a?(Hash) && seed_call.first["SEED_DEV_ENV"] == "true"
-  end
-
   test "execute runs all expected commands" do
     capture3_calls = []
 

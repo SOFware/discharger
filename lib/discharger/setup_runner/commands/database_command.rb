@@ -31,9 +31,8 @@ module Discharger
           end
 
           # Seed the database
-          seed_env = db_env.merge((config.respond_to?(:seed_env) && config.seed_env) ? {"SEED_DEV_ENV" => "true"} : {})
           with_spinner("Seeding the database") do
-            _stdout, stderr, status = Open3.capture3(seed_env, "bin/rails", "db:seed")
+            _stdout, stderr, status = Open3.capture3(db_env, "bin/rails", "db:seed")
             if status.success?
               {success: true}
             else

@@ -19,12 +19,13 @@ redis:
   version: "latest"
 
 # Private GitHub Packages gem source (optional)
-# Stores bundler credentials from the GitHub CLI (gh) so the Gemfile
-# doesn't need an embedded token. Add "github_packages" to steps, before
-# "bundler". Credentials are written to .bundle/config — keep .bundle
-# gitignored.
+# bin/setup stores bundler credentials from the GitHub CLI (gh) before
+# installing the bundle, so the Gemfile needs no embedded token. Add
+# "github_packages" to steps to check the token on every run. Credentials
+# are written to .bundle/config — keep .bundle gitignored.
 # github_packages:
 #   source: "https://rubygems.pkg.github.com/your-org"
+#   gh_timeout: 15  # seconds to wait for gh; DISCHARGER_GH_TIMEOUT overrides
 
 # Pre-Rails steps (run BEFORE Rails loads)
 # These are for system dependencies and environment setup that must happen
@@ -49,9 +50,9 @@ steps:
   - brew
   - asdf
   - git
-  # Uncomment with the github_packages block above. Must precede bundler.
+  # Uncomment with the github_packages block above to check the token.
   # - github_packages
-  - bundler
+  - bundler  # a check; bin/setup already installed the bundle
   - yarn
   - config
   - docker

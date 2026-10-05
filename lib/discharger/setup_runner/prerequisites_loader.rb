@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "yaml"
+require_relative "../timing"
 require_relative "pre_commands/pre_command_registry"
 
 module Discharger
@@ -130,8 +131,7 @@ module Discharger
         end
 
         command = command_class.new(config)
-        puts "  #{command.description}..."
-        command.execute
+        timed(command.description) { command.execute }
       end
 
       def run_custom_pre_step(step)
@@ -144,8 +144,12 @@ module Discharger
           return
         end
 
-        puts "  Running: #{description}"
-        system(command)
+        timed(description) { system(command) }
+      end
+
+      def timed(description)
+        elapsed = Timing.measure { yield }
+        puts format("  %s: %.2fs", description, elapsed)
       end
 
       def evaluate_condition(condition)

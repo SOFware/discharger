@@ -220,6 +220,25 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     assert executed, "Pre-step should have been executed"
   end
 
+  test "prints each pre_step's elapsed time" do
+    create_file("setup.yml", <<~YAML)
+      pre_steps:
+        - test_timed_step
+        - description: "Say hello"
+          command: "echo hello"
+    YAML
+    mock_command = Class.new(Discharger::SetupRunner::PreCommands::BasePreCommand) do
+      define_method(:description) { "Timed Step" }
+      define_method(:execute) {}
+    end
+    Discharger::SetupRunner::PreCommands::PreCommandRegistry.register("test_timed_step", mock_command)
+
+    output, _ = capture_io { Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml").run }
+
+    assert_match(/^  Timed Step: \d+\.\d\ds$/, output)
+    assert_match(/^  Say hello: \d+\.\d\ds$/, output)
+  end
+
   test "warns about unknown pre_steps" do
     yaml_content = <<~YAML
       pre_steps:
@@ -244,7 +263,7 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
 
     output, _ = capture_io { loader.run }
-    assert_match(/Running: Say hello/, output)
+    assert_match(/Say hello: \d+\.\d\ds/, output)
   end
 
   test "skips custom pre_step when condition is not met" do
@@ -274,7 +293,7 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
 
     output, _ = capture_io { loader.run }
-    assert_match(/Running: Say hello/, output)
+    assert_match(/Say hello: \d+\.\d\ds/, output)
   end
 
   test "evaluate_condition handles negated ENV checks" do
@@ -289,7 +308,7 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
 
     output, _ = capture_io { loader.run }
-    assert_match(/Running: Say hello/, output)
+    assert_match(/Say hello: \d+\.\d\ds/, output)
   end
 
   test "evaluate_condition handles File.exist? checks" do
@@ -305,7 +324,7 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
 
     output, _ = capture_io { loader.run }
-    assert_match(/Running: Check file/, output)
+    assert_match(/Check file: \d+\.\d\ds/, output)
   end
 
   test "evaluate_condition handles negated File.exist? checks" do
@@ -320,7 +339,7 @@ class PrerequisitesLoaderTest < ActiveSupport::TestCase
     loader = Discharger::SetupRunner::PrerequisitesLoader.new("setup.yml")
 
     output, _ = capture_io { loader.run }
-    assert_match(/Running: Create env file/, output)
+    assert_match(/Create env file: \d+\.\d\ds/, output)
 
     create_file("present.txt", "x")
     yaml_content = <<~YAML
