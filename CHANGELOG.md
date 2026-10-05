@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.5.3] - Unreleased
+
 ## [0.5.2] - 2026-10-05
 
 ### Added
@@ -23,5 +25,3 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - gh calls in setup time out after 15s instead of hanging (e7d7620)
-
-## [0.5.1] - 2026-10-02
