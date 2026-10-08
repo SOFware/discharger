@@ -503,6 +503,28 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
       "Unpushed-commit check must run before the reset"
   end
 
+  def test_prepare_discards_the_finish_branch_when_stopped_at_the_prompt
+    {"x" => "x\n", "EOF" => ""}.each do |label, input|
+      @commands.clear
+      name = :"rel_prep_stop_#{label.downcase}"
+      build_task(name).define
+      $stdin = StringIO.new(input)
+
+      assert_raises(SystemExit) { capture_io { Rake::Task["#{name}:prepare"].invoke } }
+
+      branch_idx = @commands.index { |c| c.join(" ") == "git checkout -b bump/finish-1-2-3" }
+      checkout_idx = @commands.rindex { |c| c.join(" ") == "git checkout main" }
+      delete_idx = @commands.index { |c| c.join(" ") == "git branch -D bump/finish-1-2-3" }
+
+      assert branch_idx, "Expected the finish branch to be created (#{label})"
+      assert checkout_idx, "Should switch back to the working branch (#{label})"
+      assert delete_idx, "Should delete the finish branch (#{label})"
+      assert_operator branch_idx, :<, checkout_idx, "Checkout must follow branch creation (#{label})"
+      assert_operator checkout_idx, :<, delete_idx, "Delete must follow the checkout (#{label})"
+      refute command_issued?(/git push/), "Should not push after stopping (#{label})"
+    end
+  end
+
   def test_prepare_creates_labeled_pr_when_pr_label_is_set
     task = build_task(:rel_prep_label, pr_label: "no-changelog-needed")
     task.define_singleton_method(:ensure_clean_worktree!) { true }
