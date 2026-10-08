@@ -40,6 +40,37 @@ class DischargerConfirmationTest < Minitest::Test
     assert_includes error_output, "DISCHARGER_RELEASE_CONFIRM=1"
   end
 
+  def test_eof_runs_the_cleanup_before_exiting
+    $stdin = StringIO.new("")
+    cleaned = false
+
+    capture_io do
+      assert_raises(SystemExit) { @task.send(:confirm_or_exit!) { cleaned = true } }
+    end
+
+    assert cleaned
+  end
+
+  def test_x_runs_the_cleanup_before_exiting
+    $stdin = StringIO.new("x\n")
+    cleaned = false
+
+    capture_io do
+      assert_raises(SystemExit) { @task.send(:confirm_or_exit!) { cleaned = true } }
+    end
+
+    assert cleaned
+  end
+
+  def test_enter_skips_the_cleanup
+    $stdin = StringIO.new("\n")
+    cleaned = false
+
+    capture_io { @task.send(:confirm_or_exit!) { cleaned = true } }
+
+    refute cleaned
+  end
+
   def test_env_confirmation_skips_prompt_and_stdin
     ENV["DISCHARGER_RELEASE_CONFIRM"] = "1"
     $stdin = Object.new
