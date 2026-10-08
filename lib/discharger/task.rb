@@ -220,8 +220,15 @@ module Discharger
     end
 
     def confirm_or_exit!
+      if ENV["DISCHARGER_RELEASE_CONFIRM"] == "1"
+        sysecho "Confirmation taken from DISCHARGER_RELEASE_CONFIRM"
+        return
+      end
+
       sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-      exit if $stdin.gets.chomp.match?(/^x/i)
+      input = $stdin.gets
+      abort "Run this task interactively or set DISCHARGER_RELEASE_CONFIRM=1." if input.nil?
+      exit if input.chomp.match?(/^x/i)
     end
 
     def post_to_slack(text, emoji = nil, thread_ts = nil)
