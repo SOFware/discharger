@@ -154,6 +154,8 @@ rake release:slack[text,channel,emoji]  # Send a message to Slack
 2. **Release** (`rake release`): Tag the release commit on `main`, push the tag, announce
    the release in Slack, then open the PR that bumps `main` to the next version.
 
+Set `DISCHARGER_RELEASE_CONFIRM=1` to run `release:prepare` and `release` without a TTY.
+
 `rake release` tags the newest commit that changed the current version's dated changelog
 section, so work merged after finalizing (or re-finalizing for a hotfix) is left out.
 Production ships the tagged commit, which can be older than what staging last ran.

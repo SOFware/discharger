@@ -1,5 +1,88 @@
 require_relative "test_helper"
 
+class DischargerConfirmationTest < Minitest::Test
+  def setup
+    @task = Discharger::Task.new
+    @original_stdin = $stdin
+    @original_confirmation = ENV.delete("DISCHARGER_RELEASE_CONFIRM")
+  end
+
+  def teardown
+    $stdin = @original_stdin
+    ENV["DISCHARGER_RELEASE_CONFIRM"] = @original_confirmation
+  end
+
+  def test_enter_continues
+    $stdin = StringIO.new("\n")
+
+    output, = capture_io { @task.send(:confirm_or_exit!) }
+
+    assert_includes output, "Are you ready to continue?"
+  end
+
+  def test_x_exits
+    ["x\n", "Xstop\n"].each do |input|
+      $stdin = StringIO.new(input)
+
+      capture_io { assert_raises(SystemExit) { @task.send(:confirm_or_exit!) } }
+    end
+  end
+
+  def test_eof_exits_with_failure_and_instructions
+    $stdin = StringIO.new("")
+
+    _, error_output = capture_io do
+      error = assert_raises(SystemExit) { @task.send(:confirm_or_exit!) }
+      refute_equal 0, error.status
+    end
+
+    assert_includes error_output, "interactively"
+    assert_includes error_output, "DISCHARGER_RELEASE_CONFIRM=1"
+  end
+
+  def test_eof_runs_the_cleanup_before_exiting
+    $stdin = StringIO.new("")
+    cleaned = false
+
+    capture_io do
+      assert_raises(SystemExit) { @task.send(:confirm_or_exit!) { cleaned = true } }
+    end
+
+    assert cleaned
+  end
+
+  def test_x_runs_the_cleanup_before_exiting
+    $stdin = StringIO.new("x\n")
+    cleaned = false
+
+    capture_io do
+      assert_raises(SystemExit) { @task.send(:confirm_or_exit!) { cleaned = true } }
+    end
+
+    assert cleaned
+  end
+
+  def test_enter_skips_the_cleanup
+    $stdin = StringIO.new("\n")
+    cleaned = false
+
+    capture_io { @task.send(:confirm_or_exit!) { cleaned = true } }
+
+    refute cleaned
+  end
+
+  def test_env_confirmation_skips_prompt_and_stdin
+    ENV["DISCHARGER_RELEASE_CONFIRM"] = "1"
+    $stdin = Object.new
+    $stdin.define_singleton_method(:gets) { raise "stdin must not be read" }
+
+    output, = capture_io { @task.send(:confirm_or_exit!) }
+
+    assert_includes output, "Confirmation taken from DISCHARGER_RELEASE_CONFIRM"
+    refute_includes output, "Are you ready to continue?"
+  end
+end
+
 class DischargerTaskTest < Minitest::Test
   def setup
     @task = Discharger::Task.new
@@ -418,6 +501,28 @@ class DischargerReleaseCommandSequenceTest < Minitest::Test
     assert ahead_checked_at, "Expected the unpushed-commit check to run"
     assert_operator ahead_checked_at, :<=, reset_idx,
       "Unpushed-commit check must run before the reset"
+  end
+
+  def test_prepare_discards_the_finish_branch_when_stopped_at_the_prompt
+    {"x" => "x\n", "EOF" => ""}.each do |label, input|
+      @commands.clear
+      name = :"rel_prep_stop_#{label.downcase}"
+      build_task(name).define
+      $stdin = StringIO.new(input)
+
+      assert_raises(SystemExit) { capture_io { Rake::Task["#{name}:prepare"].invoke } }
+
+      branch_idx = @commands.index { |c| c.join(" ") == "git checkout -b bump/finish-1-2-3" }
+      checkout_idx = @commands.rindex { |c| c.join(" ") == "git checkout main" }
+      delete_idx = @commands.index { |c| c.join(" ") == "git branch -D bump/finish-1-2-3" }
+
+      assert branch_idx, "Expected the finish branch to be created (#{label})"
+      assert checkout_idx, "Should switch back to the working branch (#{label})"
+      assert delete_idx, "Should delete the finish branch (#{label})"
+      assert_operator branch_idx, :<, checkout_idx, "Checkout must follow branch creation (#{label})"
+      assert_operator checkout_idx, :<, delete_idx, "Delete must follow the checkout (#{label})"
+      refute command_issued?(/git push/), "Should not push after stopping (#{label})"
+    end
   end
 
   def test_prepare_creates_labeled_pr_when_pr_label_is_set

@@ -220,8 +220,28 @@ module Discharger
     end
 
     def confirm_or_exit!
+      if ENV["DISCHARGER_RELEASE_CONFIRM"] == "1"
+        sysecho "Confirmation taken from DISCHARGER_RELEASE_CONFIRM"
+        return
+      end
+
       sysecho "Are you ready to continue? (Press Enter to continue, Type 'x' and Enter to exit)".bg(:yellow).black
-      exit if $stdin.gets.chomp.match?(/^x/i)
+      input = $stdin.gets
+      if input.nil?
+        yield if block_given?
+        abort "Run this task interactively or set DISCHARGER_RELEASE_CONFIRM=1."
+      end
+      return unless input.chomp.match?(/^x/i)
+
+      yield if block_given?
+      exit
+    end
+
+    def discard_branch!(branch)
+      syscall(
+        ["git checkout #{working_branch}"],
+        ["git branch -D #{branch}"]
+      )
     end
 
     def post_to_slack(text, emoji = nil, thread_ts = nil)
@@ -441,7 +461,7 @@ module Discharger
             If you need to make changes, edit the CHANGELOG and save the file.
             Then return here to continue with this commit.
           MSG
-          confirm_or_exit!
+          confirm_or_exit! { discard_branch!(finish_branch) }
 
           tasker["reissue:finalize"].invoke
 
