@@ -2,14 +2,16 @@ require "test_helper"
 require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/database_command"
 require "logger"
-require "ostruct"
+require "discharger/setup_runner/configuration"
 
 class DatabaseCommandTest < ActiveSupport::TestCase
+  Status = Struct.new(:success?)
+
   include SetupRunnerTestHelper
 
   def setup
     super
-    @config = OpenStruct.new
+    @config = Discharger::SetupRunner::Configuration.new
     @logger = Logger.new(StringIO.new)
     @command = Discharger::SetupRunner::Commands::DatabaseCommand.new(@config, @test_dir, @logger)
     create_file("bin/rails", "#!/usr/bin/env ruby\n# Rails stub")
@@ -51,7 +53,7 @@ class DatabaseCommandTest < ActiveSupport::TestCase
 
     # Mock Open3.capture3 to succeed
     Open3.define_singleton_method(:capture3) do |*args|
-      ["", "", OpenStruct.new(success?: true)]
+      ["", "", Status.new(true)]
     end
 
     @command.execute
@@ -77,7 +79,7 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     # Mock Open3.capture3 to track calls
     Open3.define_singleton_method(:capture3) do |*args|
       capture3_calls << args.join(" ")
-      ["", "", OpenStruct.new(success?: true)]
+      ["", "", Status.new(true)]
     end
 
     @command.execute
@@ -104,9 +106,9 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     # Mock Open3.capture3 for other calls
     Open3.define_singleton_method(:capture3) do |*args|
       if args.join(" ").include?("db:schema:load")
-        ["", "Database connection failed", OpenStruct.new(success?: false)]
+        ["", "Database connection failed", Status.new(false)]
       else
-        ["", "", OpenStruct.new(success?: true)]
+        ["", "", Status.new(true)]
       end
     end
 
@@ -125,7 +127,7 @@ class DatabaseCommandTest < ActiveSupport::TestCase
 
     # Mock Open3.capture3 to succeed
     Open3.define_singleton_method(:capture3) do |*args|
-      ["", "", OpenStruct.new(success?: true)]
+      ["", "", Status.new(true)]
     end
 
     @command.execute
@@ -148,7 +150,7 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     Open3.define_singleton_method(:capture3) do |*args|
       capture3_called = true
       capture3_args = args
-      ["", "", OpenStruct.new(success?: true)]
+      ["", "", Status.new(true)]
     end
 
     # Call the private method directly
@@ -177,7 +179,7 @@ class DatabaseCommandTest < ActiveSupport::TestCase
     Open3.define_singleton_method(:capture3) do |*args|
       capture3_called = true
       # Simulate successful execution even if not PostgreSQL
-      ["", "", OpenStruct.new(success?: true)]
+      ["", "", Status.new(true)]
     end
 
     @command.send(:terminate_database_connections)

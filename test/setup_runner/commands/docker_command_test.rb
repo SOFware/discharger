@@ -3,14 +3,14 @@ require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/docker_command"
 require "discharger/setup_runner/configuration"
 require "logger"
-require "ostruct"
 
 class DockerCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
 
   def setup
     super
-    @config = OpenStruct.new
+    @config = Discharger::SetupRunner::Configuration.new
+    @config.database = nil
     @logger = Logger.new(StringIO.new)
     @command = Discharger::SetupRunner::Commands::DockerCommand.new(@config, @test_dir, @logger)
   end
@@ -32,14 +32,14 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "can_execute? returns true when docker exists and database is configured" do
-    @config.database = OpenStruct.new(name: "db-test")
+    @config.database = database_config(name: "db-test")
     @command.define_singleton_method(:docker_available?) { true }
 
     assert @command.can_execute?
   end
 
   test "can_execute? returns true when docker exists and redis is configured" do
-    @config.redis = OpenStruct.new(name: "redis-test")
+    @config.redis = redis_config(name: "redis-test")
     @command.define_singleton_method(:docker_available?) { true }
 
     assert @command.can_execute?
@@ -62,7 +62,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute starts Docker if not running and no native PostgreSQL" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14")
+    @config.database = database_config(name: "db-test", port: 5432, version: "14")
 
     docker_started = false
     container_created = false
@@ -102,7 +102,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute skips Docker when native PostgreSQL is available" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14")
+    @config.database = database_config(name: "db-test", port: 5432, version: "14")
 
     docker_checked = false
     container_created = false
@@ -128,7 +128,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute creates database container with correct parameters" do
-    @config.database = OpenStruct.new(
+    @config.database = database_config(
       name: "db-test",
       port: 5433,
       version: "15",
@@ -170,7 +170,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute creates redis container with correct parameters" do
-    @config.redis = OpenStruct.new(
+    @config.redis = redis_config(
       name: "redis-test",
       port: 6380,
       version: "7"
@@ -208,7 +208,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute starts existing stopped container" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432)
+    @config.database = database_config(name: "db-test", port: 5432)
 
     commands_run = []
 
@@ -242,7 +242,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute recreates container if start fails" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432)
+    @config.database = database_config(name: "db-test", port: 5432)
 
     commands_run = []
 
@@ -279,7 +279,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute updates the restart policy if the container is already running" do
-    @config.database = OpenStruct.new(name: "db-test")
+    @config.database = database_config(name: "db-test")
 
     commands_run = []
 
@@ -300,7 +300,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute raises error if container fails to start" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432)
+    @config.database = database_config(name: "db-test", port: 5432)
 
     @command.define_singleton_method(:native_postgresql_available?) { false }
     @command.define_singleton_method(:docker_running?) { true }
@@ -325,7 +325,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute with prefer_docker true raises when native PostgreSQL is on the port" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: true)
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: true)
 
     @command.define_singleton_method(:native_postgresql_available?) { true }
     @command.define_singleton_method(:native_postgresql_port) { 5432 }
@@ -336,7 +336,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute with prefer_docker true creates container when no native PostgreSQL" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14", prefer_docker: true)
+    @config.database = database_config(name: "db-test", port: 5432, version: "14", prefer_docker: true)
 
     container_created = false
 
@@ -366,7 +366,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute with prefer_docker prompt and no native PostgreSQL skips the prompt and creates container" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, version: "14", prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, version: "14", prefer_docker: "prompt")
 
     prompted = false
     container_created = false
@@ -402,7 +402,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute with prefer_docker prompt uses native PostgreSQL when developer chooses native" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: "prompt")
 
     docker_checked = false
 
@@ -421,7 +421,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "execute with prefer_docker prompt raises when developer picks docker but native PostgreSQL holds the port" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: "prompt")
 
     @command.define_singleton_method(:native_postgresql_available?) { true }
     @command.define_singleton_method(:native_postgresql_port) { 5432 }
@@ -432,7 +432,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "wants_native_postgresql? returns true in non-interactive shells" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: "prompt")
     @command.define_singleton_method(:native_postgresql_port) { 5432 }
     @command.define_singleton_method(:interactive_prompt_available?) { false }
 
@@ -440,7 +440,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "wants_native_postgresql? returns false when developer answers Y" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: "prompt")
     @command.define_singleton_method(:native_postgresql_port) { 5432 }
     @command.define_singleton_method(:interactive_prompt_available?) { true }
 
@@ -453,7 +453,7 @@ class DockerCommandTest < ActiveSupport::TestCase
   end
 
   test "wants_native_postgresql? returns true when developer answers anything other than Y" do
-    @config.database = OpenStruct.new(name: "db-test", port: 5432, prefer_docker: "prompt")
+    @config.database = database_config(name: "db-test", port: 5432, prefer_docker: "prompt")
     @command.define_singleton_method(:native_postgresql_port) { 5432 }
     @command.define_singleton_method(:interactive_prompt_available?) { true }
 
@@ -463,5 +463,19 @@ class DockerCommandTest < ActiveSupport::TestCase
     assert @command.send(:wants_native_postgresql?)
   ensure
     $stdin = original_stdin if original_stdin
+  end
+
+  private
+
+  def database_config(**attrs)
+    Discharger::SetupRunner::DatabaseConfig.new.tap do |db|
+      attrs.each { |key, value| db.public_send(:"#{key}=", value) }
+    end
+  end
+
+  def redis_config(**attrs)
+    Discharger::SetupRunner::RedisConfig.new.tap do |redis|
+      attrs.each { |key, value| redis.public_send(:"#{key}=", value) }
+    end
   end
 end

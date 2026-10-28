@@ -2,14 +2,15 @@ require "test_helper"
 require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/git_command"
 require "logger"
-require "ostruct"
 
 class GitCommandTest < ActiveSupport::TestCase
+  Config = Struct.new(:git_config)
+
   include SetupRunnerTestHelper
 
   def setup
     super
-    @config = OpenStruct.new
+    @config = Config.new
     @logger = Logger.new(StringIO.new)
     @command = Discharger::SetupRunner::Commands::GitCommand.new(@config, @test_dir, @logger)
     FileUtils.mkdir_p(File.join(@test_dir, ".git"))
