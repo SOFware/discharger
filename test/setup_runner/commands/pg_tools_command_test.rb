@@ -3,14 +3,15 @@ require "setup_runner_test_helper"
 require "discharger/setup_runner/commands/pg_tools_command"
 require "logger"
 require "open3"
-require "ostruct"
+require "discharger/setup_runner/configuration"
 
 class PgToolsCommandTest < ActiveSupport::TestCase
   include SetupRunnerTestHelper
 
   def setup
     super
-    @config = OpenStruct.new(database: OpenStruct.new(name: "db-testapp"))
+    @config = Discharger::SetupRunner::Configuration.new
+    @config.database.name = "db-testapp"
     @logger = Logger.new(StringIO.new)
     @command = Discharger::SetupRunner::Commands::PgToolsCommand.new(@config, @test_dir, @logger)
   end
@@ -24,13 +25,15 @@ class PgToolsCommandTest < ActiveSupport::TestCase
   end
 
   test "can_execute? returns false when database config is missing" do
-    config = OpenStruct.new
+    config = Discharger::SetupRunner::Configuration.new
+    config.database = nil
     command = Discharger::SetupRunner::Commands::PgToolsCommand.new(config, @test_dir, @logger)
     refute command.can_execute?
   end
 
   test "can_execute? returns false when database name is blank" do
-    config = OpenStruct.new(database: OpenStruct.new(name: ""))
+    config = Discharger::SetupRunner::Configuration.new
+    config.database.name = ""
     command = Discharger::SetupRunner::Commands::PgToolsCommand.new(config, @test_dir, @logger)
     refute command.can_execute?
   end
